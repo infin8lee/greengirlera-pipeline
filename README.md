@@ -2,7 +2,7 @@
 
 A private sponsor CRM for [Green Girl Era](https://greengirlera.com): searchable pipeline, stage board, editable sponsor profiles, personalized initial and follow-up drafts, a data-based draft composer, pitch brief, and CSV import/export. There are no pipeline date or time fields.
 
-This repository is public **source code only**. Sponsor records and drafts live in a private Cloudflare D1 database behind Cloudflare Access. The original CSVs are never committed (`*.csv` is ignored and `npm run check` fails if one is tracked).
+This repository is public **source code only**. Sponsor records and drafts live in a Cloudflare D1 database. This deployment runs in **public view mode**: anyone with the link can look at the pipeline, and only the admin (signed in through Cloudflare Access at `/admin`) can add, edit or delete anything; see [Public view mode](#public-view-mode). The original CSVs are never committed (`*.csv` is ignored and `npm run check` fails if one is tracked).
 
 ## How it fits together
 
@@ -11,9 +11,15 @@ This repository is public **source code only**. Sponsor records and drafts live 
 | Frontend (`index.html`, `app.js`, `core.js`, `style.css`) | Cloudflare Worker static assets, built to `dist/` |
 | API (`src/worker.js` → `server/api.js`) | Same Worker, same origin at `/api/*` |
 | Data | Cloudflare D1 database `greengirlera-crm` (binding `DB`, see `wrangler.toml`) |
-| Login | Cloudflare Access, **One-time PIN** sent by email, policy allows only `lee@virtual-lee.com` |
+| Login | Public read-only. The admin signs in at `/admin` (Cloudflare Access, **One-time PIN** by email, policy allows only `lee@virtual-lee.com`) to edit. Without `AUTH_MODE = "view"` the whole site needs that login. |
 
-Security layers:
+## Public view mode
+
+`wrangler.toml` sets `AUTH_MODE = "view"`. Everyone with the site URL can read every record, and the editing controls are hidden for them. Every change (add, edit, stage move, delete, import, pitch brief save) is refused by the server unless the request carries a valid Cloudflare Access login for the admin, so hiding the buttons is not what protects the data. Writes also still require a same-origin `Origin` header and a JSON body.
+
+The admin door is `/admin`. Create a Cloudflare Access application that protects only the path `admin` on the site's hostnames, with an Allow policy for the admin email (Include, Emails) and the One-time PIN login method. After signing in there, Access sets its login cookie and the app switches to edit mode. Set `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` (the application's Audience tag) as Worker variables so the API can verify that login; until both exist the site stays read-only. Delete the `[vars]` block in `wrangler.toml` to put the whole site behind the login again. Any `AUTH_MODE` other than `view` fails closed.
+
+Security layers (when the login is on):
 
 1. Cloudflare Access sits in front of the whole site. Entering an email sends a real one-time code to that inbox, and the code must be entered before anything loads. Access only sends codes to emails allowed by the policy.
 2. Every `/api/*` request is independently verified in `server/auth.js`: the Access JWT's RS256 signature (against your team's published keys), issuer, audience (`ACCESS_AUD`), expiry, and the exact admin email. The API fails closed (503) if configuration is missing, and returns 401/403 for missing, expired, forged or non-admin tokens.
