@@ -84,7 +84,7 @@ test('fill mode protects edited values; overwrite mode replaces them', () => {
 });
 
 test('composer uses only saved facts, leaves placeholders and avoids em dashes', () => {
-  const c = composeDraft({ ...pipelineRows()[0], Greeting: 'Hi team,' }, { organization: 'Green Girl Era', description: 'A community — for women.', signature: '[Your name]' });
+  const c = composeDraft({ ...pipelineRows()[0], Greeting: 'Hi team,', 'Pitch angle': 'Local brand that hosts wellness events' }, { organization: 'Green Girl Era', description: 'A community — for women.', signature: '[Your name]' });
   assert.match(c.subject, /^Fairway Tea Co\. x Green Girl Era: iced tea for a golf clinic$/);
   assert.match(c.body, /^Hi team,/);
   assert.match(c.body, /local brand that hosts wellness events/);
@@ -96,6 +96,7 @@ test('composer uses only saved facts, leaves placeholders and avoids em dashes',
   const portal = composeDraft(pipelineRows()[1], {});
   assert.match(portal.body, /official request channel/);
   assert.match(portal.body, /\[Add one sentence on why Portal Bank fits/);
+  assert.doesNotMatch(composeDraft(pipelineRows()[0]).body, /hosts wellness events/, 'research notes are not pasted into emails');
   assert.ok(portal.checks.some(x => /form or portal/.test(x)));
 });
 

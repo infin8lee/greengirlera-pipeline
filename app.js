@@ -20,7 +20,7 @@ const BRIEF_LABELS = {
   signature: ['Email signature', 'Appears at the end of rewritten drafts.']
 };
 const DRAFT_STATUSES = ['Draft', 'Needs review', 'Ready to send', 'Sent manually'];
-const LONG_FIELDS = new Set(['Outreach notes', 'Why it fits GGE', 'Suggested sponsor ask', 'Qualification / limits', 'Source evidence', 'Before sending', 'Initial outreach email', 'Follow-up email', 'Next action']);
+const LONG_FIELDS = new Set(['Fit explanation', 'How they sponsor', 'What they could provide', 'Verification notes', 'Verified sources', 'Outreach notes', 'Why it fits GGE', 'Suggested sponsor ask', 'Qualification / limits', 'Source evidence', 'Before sending', 'Initial outreach email', 'Follow-up email', 'Next action']);
 const URL_FIELDS = ['Contact source URL', 'Name / fit source URL'];
 const LETTERS = {
   request: { label: 'Sponsorship request', subject: 'Subject', body: 'Initial outreach email' },
@@ -30,7 +30,7 @@ const LETTERS = {
 const state = {
   email: '', records: [], brief: { ...DEFAULT_BRIEF },
   view: 'sponsors', // sponsors | pipeline | board | brief
-  filters: { q: '', category: '', stage: '', priority: '', market: '', sort: 'priority' },
+  filters: { q: '', category: '', stage: '', priority: '', market: '', fit: '', sort: 'priority' },
   current: null, // { record, original, composed, letter }
   briefDirty: false,
   publicView: false, readOnly: false
@@ -79,6 +79,10 @@ const contactLine = r => hasName(r.data) ? r.data['Name / target'] : (r.data['Co
 const initials = name => (String(name || '?').replace(/[^A-Za-z0-9 &]/g, '').split(/\s+/).filter(w => w && w !== '&').slice(0, 2).map(w => w[0]).join('') || '?').toUpperCase();
 const hue = text => { let h = 0; for (const c of String(text)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
 const tone = r => `--mono-h:${(hue(r.data.Category || 'x') % 60) + 110}`; // stays in the green family
+const FIT_ORDER = ['Strong', 'Good', 'Possible', 'Weak', 'Not a fit'];
+const fitClass = f => 'fit-' + String(f || 'unrated').toLowerCase().replace(/[^a-z]+/g, '-');
+const fitBadge = f => f ? `<span class="fit ${fitClass(f)}">${esc(f === 'Not a fit' ? 'Not a fit' : f + ' fit')}</span>` : '';
+const lines = v => String(v || '').split(/\n+/).map(x => x.trim()).filter(Boolean);
 const wave = p => /^1\b/.test(p || '') ? 'First wave' : /^3\b/.test(p || '') ? 'Qualify first' : /^2\b/.test(p || '') ? 'Second wave' : (p || '');
 
 // ---------- screens ----------
@@ -180,7 +184,7 @@ function filteredRecords() {
   const rows = state.records.filter(r =>
     (!q || [r.company, r.id, r.data['Name / target'], r.data.Category, r.data['Contact role'], r.data['Outreach notes'], r.data['Suggested sponsor ask'], r.data['Why it fits GGE'], r.data['Market / coverage']].join(' ').toLowerCase().includes(q)) &&
     (!f.category || r.data.Category === f.category) && (!f.stage || stage(r) === f.stage) && (!f.priority || r.data.Priority === f.priority) &&
-    (!f.market || (f.market === 'pa' ? isPA(r) : isNational(r))));
+    (!f.market || (f.market === 'pa' ? isPA(r) : isNational(r))) && (!f.fit || (r.data['Fit rating'] || '') === f.fit));
   const by = { priority: r => (r.data.Priority || '9') + r.company.toLowerCase(), company: r => r.company.toLowerCase(), stage: r => STAGES.indexOf(stage(r)) + r.company.toLowerCase() };
   return rows.sort((a, b) => String(by[f.sort](a)).localeCompare(String(by[f.sort](b)), undefined, { numeric: true }));
 }
@@ -198,6 +202,9 @@ function sponsorsView() {
           <button class="chip ${!f.category ? 'on' : ''}" data-cat="">All</button>
           ${categories().map(c => `<button class="chip ${f.category === c ? 'on' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}
         </div>
+        ${state.records.some(r => r.data['Fit rating']) ? `<div class="chips small" role="group" aria-label="Filter by fit">
+          ${[['', 'Any fit'], ...FIT_ORDER.filter(x => state.records.some(r => r.data['Fit rating'] === x)).map(x => [x, x])].map(([v, l]) => `<button class="chip ${f.fit === v ? 'on' : ''}" data-fit="${esc(v)}">${esc(l)}</button>`).join('')}
+        </div>` : ''}
         <div class="chips small" role="group" aria-label="Filter by market">
           ${[['', 'Everywhere'], ['pa', 'Pennsylvania'], ['national', 'Nationwide']].map(([v, l]) => `<button class="chip ${f.market === v ? 'on' : ''}" data-market="${v}">${l}</button>`).join('')}
         </div>
@@ -208,6 +215,7 @@ function sponsorsView() {
   </div>`;
   content.querySelector('#q').addEventListener('input', e => { f.q = e.target.value; drawRail(); });
   content.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => { f.category = b.dataset.cat; content.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('on', x === b)); drawRail(); }));
+  content.querySelectorAll('[data-fit]').forEach(b => b.addEventListener('click', () => { f.fit = b.dataset.fit; content.querySelectorAll('[data-fit]').forEach(x => x.classList.toggle('on', x === b)); drawRail(); }));
   content.querySelectorAll('[data-market]').forEach(b => b.addEventListener('click', () => { f.market = b.dataset.market; content.querySelectorAll('[data-market]').forEach(x => x.classList.toggle('on', x === b)); drawRail(); }));
   const dossier = content.querySelector('#dossier');
   dossier.addEventListener('input', onEdit);
@@ -228,7 +236,7 @@ function drawRail() {
   list.innerHTML = rows.length ? rows.map(r => `<li><button class="sponsor-item ${r.id === currentId ? 'on' : ''}" data-id="${esc(r.id)}" ${r.id === currentId ? 'aria-current="true"' : ''}>
       <span class="mono" style="${tone(r)}" aria-hidden="true">${esc(initials(r.company))}</span>
       <span class="si-text"><strong>${esc(r.company)}</strong><small>${esc(r.data.Category || 'Uncategorized')} · ${esc(r.data['Market / coverage'] || 'Market to confirm')}</small></span>
-      <span class="si-meta">${/^1\b/.test(r.data.Priority || '') ? '<span class="dot" title="First wave"></span>' : ''}${stage(r) !== 'Prospect' ? `<span class="si-stage">${esc(stage(r))}</span>` : ''}</span>
+      <span class="si-meta">${r.data['Fit rating'] ? `<span class="si-fit ${fitClass(r.data['Fit rating'])}">${esc(r.data['Fit rating'])}</span>` : (/^1\b/.test(r.data.Priority || '') ? '<span class="dot" title="First wave"></span>' : '')}${stage(r) !== 'Prospect' ? `<span class="si-stage">${esc(stage(r))}</span>` : ''}</span>
     </button></li>`).join('') : '<li class="rail-empty">No sponsors match. Try another search or filter.</li>';
   list.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => openSponsor(b.dataset.id)));
 }
@@ -271,7 +279,7 @@ function drawDossier() {
   const contactUrl = safeURL(d['Contact source URL']);
   const sources = URL_FIELDS.map(k => safeURL(d[k])).flatMap(u => u ? [u] : []).concat(
     URL_FIELDS.flatMap(k => String(d[k] || '').split(/\s+/).slice(1).map(safeURL).filter(Boolean)));
-  const uniqueSources = [...new Set(sources)];
+  const uniqueSources = [...new Set(sources.concat(lines(d['Verified sources']).map(safeURL).filter(Boolean)))];
 
   box.innerHTML = `
     <button class="back" type="button" id="back">← All sponsors</button>
@@ -281,7 +289,7 @@ function drawDossier() {
         <div class="hero-text">
           <div class="eyebrow">${isNew ? 'New sponsor' : esc([d.Category, wave(d.Priority)].filter(Boolean).join(' · '))}</div>
           ${isNew ? `<label class="sr" for="f-Company">Company</label><input id="f-Company" class="hero-input" data-key="Company" placeholder="Company name" value="${esc(company)}">` : `<h2 tabindex="-1">${esc(company)}</h2>`}
-          <p class="hero-sub">${esc(d['Market / coverage'] || 'Market to confirm')}${d['Imported stage'] ? ` · marked “${esc(d['Imported stage'])}”` : ''}</p>
+          <p class="hero-sub">${fitBadge(d['Fit rating'])}${esc(d['Market / coverage'] || 'Market to confirm')}${d['Imported stage'] ? ` · marked “${esc(d['Imported stage'])}”` : ''}</p>
         </div>
         <div class="hero-status">
           <label class="pill-select"><span class="sr">Stage</span><select data-key="Stage">${STAGES.map(s => `<option ${stage(r) === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
@@ -291,13 +299,14 @@ function drawDossier() {
       <section class="about" aria-label="Who they are">
         <h3 class="section-title">Who they are</h3>
         <div class="facts">
-          <div class="fact wide"><span class="fact-label">Why they fit Green Girl Era</span><p class="quote">${esc(d['Why it fits GGE'] || 'Add why this sponsor fits.')}</p></div>
+          <div class="fact wide"><span class="fact-label">Why they fit Green Girl Era</span><p class="quote">${esc(d['Fit explanation'] || d['Why it fits GGE'] || 'Add why this sponsor fits.')}</p></div>
+          ${d['How they sponsor'] ? `<div class="fact wide direction"><span class="fact-label">How they sponsor</span><p>${esc(d['How they sponsor'])}</p>${d['What they could provide'] ? `<p class="provide"><b>What they could provide:</b> ${esc(d['What they could provide'])}</p>` : ''}</div>` : ''}
           <div class="fact"><span class="fact-label">What to ask for</span><p>${esc(d['Suggested sponsor ask'] || 'To decide')}</p></div>
           <div class="fact"><span class="fact-label">Who to reach</span><p>${esc(hasName(d) ? d['Name / target'] : 'Name not publicly listed')}${d['Contact role'] ? `<small>${esc(d['Contact role'])}</small>` : ''}</p></div>
           <div class="fact"><span class="fact-label">How to reach them</span><p>${email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : 'No public email'}<small>${esc(d['Contact route'] || 'Route to confirm')}${d['Outreach contact route'] ? ` · ${esc(d['Outreach contact route'])}` : ''}</small>${contactUrl ? `<a class="source" href="${esc(contactUrl)}" target="_blank" rel="noopener noreferrer">Contact page ↗</a>` : ''}</p></div>
           <div class="fact"><span class="fact-label">Next step</span><p>${esc(d['Next action'] || 'Review and decide')}</p></div>
           ${d['Qualification / limits'] ? `<div class="fact wide caution"><span class="fact-label">Keep in mind</span><p>${esc(d['Qualification / limits'])}</p></div>` : ''}
-          ${d['Source evidence'] || uniqueSources.length ? `<div class="fact wide"><span class="fact-label">Research</span><p>${esc(d['Source evidence'] || '')}</p><div class="source-list">${uniqueSources.map(u => `<a class="source" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(new URL(u).hostname.replace(/^www\./, ''))} ↗</a>`).join('')}</div></div>` : ''}
+          ${d['Source evidence'] || uniqueSources.length ? `<div class="fact wide"><span class="fact-label">Research${d['Verification confidence'] ? ` · verification confidence: ${esc(d['Verification confidence'])}` : ''}</span><p>${esc(d['Source evidence'] || '')}</p>${d['Verification notes'] ? `<p class="vnotes">${esc(d['Verification notes'])}</p>` : ''}${d['Fit explanation'] && d['Why it fits GGE'] ? `<p class="small muted">Original research note: ${esc(d['Why it fits GGE'])}</p>` : ''}<div class="source-list">${uniqueSources.map(u => `<a class="source" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(new URL(u).hostname.replace(/^www\./, ''))} ↗</a>`).join('')}</div></div>` : ''}
         </div>
       </section>
 
@@ -337,7 +346,14 @@ function drawDossier() {
       <details class="more">
         <summary>Research details</summary>
         <div class="grid">
-          <div class="wide">${input('Why it fits GGE', { label: 'Why they fit' })}</div>
+          <div class="field"><label for="f-fit">Fit rating</label><select id="f-fit" data-key="Fit rating">${['', ...FIT_ORDER, ...(d['Fit rating'] && !FIT_ORDER.includes(d['Fit rating']) ? [d['Fit rating']] : [])].map(v => `<option value="${esc(v)}" ${(d['Fit rating'] || '') === v ? 'selected' : ''}>${esc(v || 'Not rated')}</option>`).join('')}</select></div>
+          ${input('Verification confidence')}
+          <div class="wide">${input('Fit explanation', { label: 'Why they fit (explanation)', long: true, rows: 4 })}</div>
+          <div class="wide">${input('How they sponsor', { long: true })}</div>
+          <div class="wide">${input('What they could provide', { long: true })}</div>
+          <div class="wide">${input('Verification notes', { long: true })}</div>
+          <div class="wide">${input('Verified sources', { long: true, placeholder: 'One link per line' })}</div>
+          <div class="wide">${input('Why it fits GGE', { label: 'Original research note' })}</div>
           <div class="wide">${input('Suggested sponsor ask', { label: 'What to ask for' })}</div>
           <div class="wide">${input('Qualification / limits', { label: 'Keep in mind' })}</div>
           <div class="wide">${input('Source evidence', { label: 'Research notes' })}</div>

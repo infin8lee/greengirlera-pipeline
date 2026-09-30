@@ -196,7 +196,8 @@ export function composeDraft(data, brief = {}) {
   const company = String(data.Company || '').trim() || '[Company]';
   const org = String(brief.organization || '').trim() || 'Green Girl Era';
   const ask = lowerFirst(data['Suggested sponsor ask']);
-  const fit = lowerFirst(data['Why it fits GGE']);
+  // A sponsor-facing reason, written for the email. Research notes are never pasted into emails.
+  const fit = lowerFirst(data['Pitch angle']);
   const portal = isPortalRoute(data['Contact route']) || isPortalRoute(data['Outreach contact route']);
   const signature = String(brief.signature || '').trim() || `[Your name]\n${org}`;
   const greeting = greetingFor(data, company);
@@ -209,7 +210,7 @@ export function composeDraft(data, brief = {}) {
   const paragraphs = [
     greeting,
     `I'm reaching out on behalf of ${org}. ${about}`,
-    fit ? `We think ${company} could be a natural fit because ${fit}.` : `[Add one sentence on why ${company} fits ${org}.]`,
+    fit ? `We think ${company} could be a natural fit because ${fit}.` : `[Add one sentence on why ${company} fits ${org}. See “Why they fit” on this sponsor's page.]`,
     `We would love to explore ${topic}.` + (audience ? ` ${audience}` : ' [Add confirmed audience details, such as member profile and expected event size.]'),
     offer ? `In return, we can offer ${lowerFirst(offer)}.` : '[Add the sponsor benefits you can confirm.]',
     portal
