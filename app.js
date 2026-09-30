@@ -1,6 +1,9 @@
 import { STAGES, DRAFT_FIELDS, PIPELINE_COLUMNS, OUTREACH_COLUMNS, esc, parseCSV, csv, safeURL, money, amount, stage, planImport, exportRows, composeDraft, isPortalRoute } from './core.js';
 
 const root = document.querySelector('#app');
+const CREST = `<svg class="crest" viewBox="0 0 64 74" aria-hidden="true" focusable="false"><path d="M32 3 58 12v24c0 17-11 29-26 35C17 65 6 53 6 36V12z" fill="#1f4a3a" stroke="#c9a96e" stroke-width="3"/><path d="M32 9 52 16v20c0 13-8.5 23-20 28-11.5-5-20-15-20-28V16z" fill="none" stroke="#e8a0ab" stroke-width="1.4"/><text x="32" y="43" text-anchor="middle" font-family="'Libre Baskerville', Georgia, serif" font-weight="700" font-size="17" fill="#eea3ae" letter-spacing=".5">GGE</text><path d="M29 49h6l-2 2v7h-2v-7z" fill="#c9a96e"/></svg>`;
+const brand = (sub = 'Sponsor Studio') => `<div class="brandmark">${CREST}<span class="bm-text"><small>Est. 2026</small><b>Green Girl Era</b>${sub ? `<em>${sub}</em>` : ''}</span></div>`;
+
 const DEFAULT_BRIEF = {
   organization: 'Green Girl Era',
   description: 'Green Girl Era is a private social and lifestyle community for professional women, with a Philadelphia founding chapter and experiences across golf, wellness, networking and curated lifestyle events.',
@@ -79,7 +82,7 @@ const wave = p => /^1\b/.test(p || '') ? 'First wave' : /^3\b/.test(p || '') ? '
 
 // ---------- screens ----------
 function screen(title, message, actions = '') {
-  root.innerHTML = `<div class="gate"><div class="gate-card"><div class="brandmark">green girl era<span>Sponsor Studio</span></div><h1>${title}</h1><p>${message}</p>${actions}</div></div>`;
+  root.innerHTML = `<div class="gate"><div class="gate-card">${brand()}<h1>${title}</h1><p>${message}</p>${actions}</div></div>`;
 }
 
 function sessionExpired() {
@@ -127,7 +130,7 @@ function render() {
   root.innerHTML = `
   <a class="skip" href="#main">Skip to content</a>
   <header class="masthead">
-    <div class="brandmark">green girl era<span>Sponsor Studio</span></div>
+    ${brand()}
     <nav class="tabsnav" aria-label="Workspace">${nav.map(([id, label]) => `<button class="navlink ${state.view === id ? 'active' : ''}" data-view="${id}" ${state.view === id ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>
     <div class="mast-actions">
       ${state.readOnly ? `<span class="view-note" role="status">View only</span><a class="button small-btn" href="/admin" id="admin-link">Admin sign in</a>` : `
@@ -237,6 +240,7 @@ function openSponsor(id) {
   if (state.view !== 'sponsors') { state.view = 'sponsors'; setCurrent(rec); render(); }
   else { setCurrent(rec); drawDossier(); drawRail(); }
   document.querySelector('.studio')?.classList.add('has-current');
+  document.querySelectorAll('#dossier .autogrow').forEach(grow);
   document.querySelector('#dossier')?.scrollTo?.(0, 0);
   window.scrollTo(0, 0);
   document.querySelector('#dossier h2')?.focus();
@@ -256,7 +260,7 @@ function drawDossier() {
   const box = document.querySelector('#dossier');
   if (!box) return;
   if (!state.current) {
-    box.innerHTML = `<div class="dossier-empty"><div class="brandmark">green girl era</div><p>Choose a sponsor to see who they are and your tailored sponsorship request.</p></div>`;
+    box.innerHTML = `<div class="dossier-empty">${CREST}<p>Choose a sponsor to see who they are and your tailored sponsorship request.</p></div>`;
     return;
   }
   const c = state.current, r = c.record, d = r.data, isNew = !r.id;
@@ -382,9 +386,12 @@ function lockFields(scope) {
   scope.querySelectorAll('select[data-key], select[data-move]').forEach(x => { x.disabled = true; });
 }
 
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'l-subject') e.preventDefault(); });
+
 function onEdit(e) {
   const key = e.target.dataset?.key;
   if (!key || !state.current || state.readOnly) return;
+  if (e.target.id === 'l-subject' && /[\r\n]/.test(e.target.value)) e.target.value = e.target.value.replace(/[\r\n]+/g, ' ');
   state.current.record.data[key] = e.target.value;
   // keep duplicate controls for the same field in sync
   document.querySelectorAll(`#dossier [data-key="${CSS.escape(key)}"]`).forEach(el => { if (el !== e.target && el.value !== e.target.value) el.value = e.target.value; });
@@ -397,7 +404,8 @@ function updateSavebar() {
   if (bar) bar.hidden = state.readOnly || (!isDirty() && !!state.current?.record.id);
 }
 
-const grow = el => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; };
+const grow = el => { if (!el.offsetParent) return; el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; };
+window.addEventListener('resize', () => document.querySelectorAll('#dossier .autogrow').forEach(grow));
 
 function drawLetter() {
   const c = state.current, d = c.record.data, l = LETTERS[c.letter];
@@ -409,7 +417,7 @@ function drawLetter() {
   box.innerHTML = `
     <div class="letter-meta">
       <div class="lm-row"><span>To</span><b>${email ? esc(email) : 'No public email'}</b>${portal ? `<em>${contactUrl ? `Send through their <a href="${esc(contactUrl)}" target="_blank" rel="noopener noreferrer">form or portal ↗</a>` : 'Use their form or portal'}</em>` : ''}</div>
-      <div class="lm-row subject"><label for="l-subject">Subject</label><input id="l-subject" data-key="${esc(l.subject)}" value="${esc(d[l.subject] || '')}" placeholder="Subject line"></div>
+      <div class="lm-row subject"><label for="l-subject">Subject</label><textarea id="l-subject" class="autogrow subject-input" rows="1" data-key="${esc(l.subject)}" placeholder="Subject line">${esc(d[l.subject] || '')}</textarea></div>
     </div>
     <label class="sr" for="l-body">${esc(l.label)} body</label>
     <textarea id="l-body" class="letter-body autogrow" data-key="${esc(l.body)}" placeholder="Write your ${c.letter === 'request' ? 'sponsorship request' : 'follow-up'} here…">${esc(d[l.body] || '')}</textarea>
@@ -423,7 +431,7 @@ function drawLetter() {
     ${d['Before sending'] ? `<details class="checklist"><summary>Before you send</summary><p>${esc(d['Before sending'])}</p></details>` : ''}
     <p class="fineprint">${state.readOnly ? 'View only. ' : ''}Nothing is sent from this workspace. Copy the email, or open it in your own email app to review and send.</p>`;
   if (state.readOnly) lockFields(box);
-  grow(box.querySelector('#l-body'));
+  grow(box.querySelector('#l-body')); grow(box.querySelector('#l-subject'));
   box.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
     const subject = d[l.subject] || '', body = d[l.body] || '';
     const text = { all: `Subject: ${subject}\n\n${body}`, subject, body }[b.dataset.copy];
