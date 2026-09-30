@@ -29,11 +29,12 @@ const LETTERS = {
 
 const state = {
   email: '', records: [], brief: { ...DEFAULT_BRIEF },
-  view: location.hash === '#plan' ? 'plan' : 'sponsors', // sponsors | pipeline | board | brief | plan
+  view: ({ '#plan': 'plan', '#membership': 'members' })[location.hash] || 'sponsors', // sponsors | pipeline | board | brief | plan | members
   filters: { q: '', category: '', stage: '', priority: '', market: '', fit: '', sort: 'priority' },
   current: null, // { record, original, composed, letter }
   briefDirty: false,
-  publicView: false, readOnly: false, catsOpen: false
+  publicView: false, readOnly: false, catsOpen: false,
+  members: [], leadsVisible: false, memberTab: 'channels', memberType: ''
 };
 
 // ---------- utilities ----------
@@ -152,8 +153,10 @@ async function boot() {
     return screen('Workspace unavailable', esc(err.message), `<button class="primary" id="retry">Try again</button>`), document.querySelector('#retry').addEventListener('click', boot);
   }
   try {
-    const [{ records }, { brief }] = await Promise.all([api('sponsors'), api('settings/brief')]);
+    const [{ records }, { brief }, members] = await Promise.all([api('sponsors'), api('settings/brief'), api('members').catch(() => ({ records: [], leadsVisible: false }))]);
     state.records = records;
+    state.members = members.records || [];
+    state.leadsVisible = !!members.leadsVisible;
     if (brief) state.brief = { ...DEFAULT_BRIEF, ...brief };
     render();
   } catch (err) {
@@ -163,7 +166,7 @@ async function boot() {
 
 // ---------- shell ----------
 function render() {
-  const nav = [['plan', 'Overview Plan'], ['sponsors', 'Sponsors'], ['pipeline', 'Pipeline'], ['board', 'Stages'], ['brief', 'Pitch brief']];
+  const nav = [['plan', 'Overview Plan'], ['sponsors', 'Sponsors'], ['pipeline', 'Pipeline'], ['board', 'Stages'], ['brief', 'Pitch brief'], ['members', 'Membership']];
   root.innerHTML = `
   <a class="skip" href="#main">Skip to content</a>
   <header class="masthead">
@@ -193,6 +196,7 @@ function render() {
   });
   if (state.view === 'brief') return briefView();
   if (state.view === 'plan') return planView();
+  if (state.view === 'members') return membersView();
   if (state.view === 'sponsors') return sponsorsView();
   pipelineView();
 }
@@ -203,7 +207,7 @@ function switchView(view) {
   state.briefDirty = false;
   if (view !== 'sponsors') state.current = null;
   state.view = view;
-  history.replaceState(null, '', view === 'plan' ? '#plan' : location.pathname + location.search);
+  history.replaceState(null, '', ({ plan: '#plan', members: '#membership' })[view] || location.pathname + location.search);
   render();
 }
 
@@ -752,6 +756,117 @@ function planView() {
   const content = document.querySelector('#content');
   content.querySelectorAll('.plan-co').forEach(b => b.addEventListener('click', () => openSponsor(b.dataset.id)));
   content.querySelectorAll('[data-view-go]').forEach(b => b.addEventListener('click', () => switchView(b.dataset.viewGo)));
+}
+
+// ---------- membership pipeline ----------
+// Separate from sponsors. Channels are organizations (public in view mode); leads are people and the
+// API only returns them to the signed-in admin.
+const CHANNEL_TYPES = ["Women's Professional Network", 'Golf & Pickleball', 'Alumnae Network', 'Chamber & Business Association', 'Wellness & Social', 'Corporate Network', 'Community & Events'];
+const CHANNEL_STAGES = ['To contact', 'Contacted', 'In conversation', 'Partnered', 'Not a fit'];
+const LEAD_STAGES = ['New', 'Contacted', 'Invited to event', 'Attended event', 'Applied', 'Member', 'Not now'];
+const LEAD_SOURCES = ['Referral', 'Event guest', 'Applied on website', 'Instagram', 'LinkedIn connection', 'Recruitment channel', 'Other'];
+const MEMBER_FIELDS = {
+  channel: [['Name', 'Organization'], ['Channel type', 'Type', CHANNEL_TYPES], ['Area'], ['Stage', 'Stage', CHANNEL_STAGES], ['Fit rating', 'Fit', ['Strong', 'Good', 'Possible']], ['Who they reach', '', null, true], ['Why they fit GGE', '', null, true], ['How to reach their members', '', null, true], ['Suggested first step', '', null, true], ['Public email'], ['Contact route'], ['Contact URL'], ['Source URL'], ['Outreach message', '', null, true], ['Notes', '', null, true]],
+  lead: [['Name'], ['How we met', '', LEAD_SOURCES], ['Referred by or channel'], ['Stage', 'Stage', LEAD_STAGES], ['Email'], ['Phone'], ['Instagram or LinkedIn'], ['Interests', 'Interests (golf, wellness, networking...)'], ['Okay to contact', 'Okay to contact?', ['Yes', 'Not yet asked']], ['Next step', '', null, true], ['Notes', '', null, true]]
+};
+const mStage = r => r.data.Stage || (r.kind === 'lead' ? 'New' : 'To contact');
+
+function membersView() {
+  const channels = state.members.filter(r => r.kind === 'channel');
+  const leads = state.members.filter(r => r.kind === 'lead');
+  const tab = state.memberTab === 'leads' ? 'leads' : 'channels';
+  const count = (list, st) => list.filter(r => mStage(r) === st).length;
+  const shown = channels.filter(r => !state.memberType || r.data['Channel type'] === state.memberType);
+  const types = CHANNEL_TYPES.filter(t => channels.some(r => r.data['Channel type'] === t));
+  const link = u => safeURL(u) ? `<a href="${esc(safeURL(u))}" target="_blank" rel="noopener">${esc(new URL(safeURL(u)).hostname.replace(/^www\./, ''))} ↗</a>` : '';
+  const card = r => { const d = r.data; return `<article class="mcard">
+      <header><div><h3>${esc(r.name)}</h3><small>${esc(d['Channel type'] || '')}${d.Area ? ' · ' + esc(d.Area) : ''}</small></div>${fitBadge(d['Fit rating'])}</header>
+      ${d['Who they reach'] ? `<p><b>Who they reach.</b> ${esc(d['Who they reach'])}</p>` : ''}
+      ${d['Why they fit GGE'] ? `<p><b>Why they fit.</b> ${esc(d['Why they fit GGE'])}</p>` : ''}
+      ${d['How to reach their members'] ? `<p><b>How to reach members.</b> ${esc(d['How to reach their members'])}</p>` : ''}
+      ${d['Suggested first step'] ? `<p class="mnext"><b>First step.</b> ${esc(d['Suggested first step'])}</p>` : ''}
+      <div class="mlinks">${isEmail(d['Public email']) ? `<a href="mailto:${esc(d['Public email'])}">${esc(d['Public email'])}</a>` : ''}${link(d['Contact URL'])}${d['Contact route'] ? `<span class="pill">${esc(d['Contact route'])}</span>` : ''}${d['Source URL'] && d['Source URL'] !== d['Contact URL'] ? `<span class="muted small">Source: ${link(d['Source URL'])}</span>` : ''}</div>
+      ${d['Outreach message'] ? `<details><summary>Outreach message</summary><pre class="mmsg">${esc(d['Outreach message'])}</pre><button type="button" class="small-btn" data-mcopy="${esc(r.id)}">Copy message</button></details>` : ''}
+      <footer>${state.readOnly ? `<span class="pill">${esc(mStage(r))}</span>` : `<label><span class="sr">Stage for ${esc(r.name)}</span><select data-mstage="${esc(r.id)}">${CHANNEL_STAGES.map(s => `<option ${s === mStage(r) ? 'selected' : ''}>${s}</option>`).join('')}</select></label><button type="button" class="small-btn" data-medit="${esc(r.id)}">Edit</button>`}</footer>
+    </article>`; };
+
+  document.querySelector('#content').innerHTML = `<div class="overview members">
+  <header class="ov-head"><div class="eyebrow">Membership</div><h1>Finding our next members</h1>
+    <p class="muted">A separate pipeline from sponsors. <b>Recruitment channels</b> are organizations where women likely to join Green Girl Era already gather, each with a verified way to reach their members. <b>Member leads</b> are individual people, added by hand from referrals, events and applications, and kept private to the admin.</p></header>
+  <section class="stats" aria-label="Membership summary">
+    <div class="stat"><small>Channels</small><strong>${channels.length}</strong><span>${count(channels, 'Partnered')} partnered · ${count(channels, 'In conversation')} in conversation</span></div>
+    <div class="stat"><small>Channels contacted</small><strong>${channels.length - count(channels, 'To contact')}</strong><span>of ${channels.length}</span></div>
+    <div class="stat"><small>Member leads</small><strong>${state.leadsVisible ? leads.length : '—'}</strong><span>${state.leadsVisible ? `${count(leads, 'Applied')} applied` : 'Private to the admin'}</span></div>
+    <div class="stat"><small>New members</small><strong>${state.leadsVisible ? count(leads, 'Member') : '—'}</strong><span>${state.leadsVisible ? `${count(leads, 'Attended event')} attended an event` : 'Private to the admin'}</span></div>
+  </section>
+  <div class="mtabs" role="tablist"><button role="tab" type="button" data-mtab="channels" aria-selected="${tab === 'channels'}" class="${tab === 'channels' ? 'on' : ''}">Recruitment channels <span class="n">${channels.length}</span></button><button role="tab" type="button" data-mtab="leads" aria-selected="${tab === 'leads'}" class="${tab === 'leads' ? 'on' : ''}">Member leads ${state.leadsVisible ? `<span class="n">${leads.length}</span>` : '🔒'}</button>
+    ${state.readOnly ? '' : `<button type="button" class="primary small-btn" id="m-add">${tab === 'leads' ? 'Add lead' : 'Add channel'}</button>`}</div>
+  ${tab === 'channels' ? `
+    ${types.length > 1 ? `<div class="chips wrap" role="group" aria-label="Channel type"><button type="button" class="chip ${state.memberType ? '' : 'on'}" data-mtype="">All <span class="n">${channels.length}</span></button>${types.map(t => `<button type="button" class="chip ${state.memberType === t ? 'on' : ''}" data-mtype="${esc(t)}">${esc(t)} <span class="n">${channels.filter(r => r.data['Channel type'] === t).length}</span></button>`).join('')}</div>` : ''}
+    ${shown.length ? `<div class="mgrid">${shown.map(card).join('')}</div>` : '<div class="empty"><h2>No channels yet</h2><p>Recruitment channels will appear here once they are verified.</p></div>'}`
+  : !state.leadsVisible ? `<div class="empty"><h2>Member leads are private</h2><p>Leads are individual people, so they are only shown to the admin after signing in. The server never sends them to public visitors.</p>${state.readOnly ? '<a class="button small-btn" href="/admin">Admin sign in</a>' : ''}</div>`
+  : leads.length ? `<div class="tablewrap"><table><thead><tr><th scope="col">Name</th><th scope="col">How we met</th><th scope="col">Stage</th><th scope="col">Next step</th></tr></thead><tbody>${leads.map(r => `<tr><td><button type="button" class="row-open" data-medit="${esc(r.id)}"><span><strong>${esc(r.name)}</strong><small>${esc(r.data.Interests || '')}</small></span></button></td><td>${esc(r.data['How we met'] || '')}<small>${esc(r.data['Referred by or channel'] || '')}</small></td><td><select data-mstage="${esc(r.id)}" aria-label="Stage for ${esc(r.name)}">${LEAD_STAGES.map(s => `<option ${s === mStage(r) ? 'selected' : ''}>${s}</option>`).join('')}</select></td><td class="next">${esc(r.data['Next step'] || '')}</td></tr>`).join('')}</tbody></table></div>`
+  : '<div class="empty"><h2>No leads yet</h2><p>Add people who were referred, came to an event or applied, and track them from first hello to member. Only add people who shared their details with you.</p></div>'}
+  </div>`;
+  const c = document.querySelector('#content');
+  c.querySelectorAll('[data-mtab]').forEach(b => b.addEventListener('click', () => { state.memberTab = b.dataset.mtab; membersView(); }));
+  c.querySelectorAll('[data-mtype]').forEach(b => b.addEventListener('click', () => { state.memberType = b.dataset.mtype; membersView(); }));
+  c.querySelectorAll('[data-medit]').forEach(b => b.addEventListener('click', () => editMember(state.members.find(r => r.id === b.dataset.medit))));
+  c.querySelectorAll('[data-mstage]').forEach(sel => sel.addEventListener('change', () => { const r = state.members.find(x => x.id === sel.dataset.mstage); if (r) saveMember({ ...r, data: { ...r.data, Stage: sel.value } }, sel); }));
+  c.querySelectorAll('[data-mcopy]').forEach(b => b.addEventListener('click', async () => { const r = state.members.find(x => x.id === b.dataset.mcopy); try { await navigator.clipboard.writeText(r.data['Outreach message']); b.textContent = 'Copied'; } catch { b.textContent = 'Select and copy'; } }));
+  c.querySelector('#m-add')?.addEventListener('click', () => editMember({ id: '', kind: tab === 'leads' ? 'lead' : 'channel', name: '', data: {}, version: null }));
+}
+
+async function saveMember(rec, control) {
+  if (control) control.disabled = true;
+  try {
+    const body = { kind: rec.kind, name: rec.name, data: rec.data, version: rec.version };
+    const { record } = rec.id ? await api('members/' + encodeURIComponent(rec.id), { method: 'PUT', body }) : await api('members', { method: 'POST', body });
+    const i = state.members.findIndex(r => r.id === record.id);
+    if (i >= 0) state.members[i] = record; else state.members.push(record);
+    state.members.sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
+    notify(`${record.name} saved.`, 'success');
+    return true;
+  } catch (err) {
+    notify(err.message, 'error');
+    if (err.status === 409 && err.body?.record) { const i = state.members.findIndex(r => r.id === err.body.record.id); if (i >= 0) state.members[i] = err.body.record; }
+    return false;
+  } finally { if (state.view === 'members' && !document.querySelector('.modal')) membersView(); }
+}
+
+function editMember(rec) {
+  if (!rec || state.readOnly) return;
+  const opener = document.activeElement;
+  const fields = MEMBER_FIELDS[rec.kind];
+  const el = document.createElement('div');
+  el.className = 'modal';
+  const field = ([key, label = key, options, long]) => `<div class="field"><label for="mf-${esc(key)}">${esc(label || key)}</label>${options
+    ? `<select id="mf-${esc(key)}" name="${esc(key)}"><option value=""></option>${options.map(o => `<option ${o === (rec.data[key] || (key === 'Stage' ? mStage(rec) : '')) ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
+    : long ? `<textarea id="mf-${esc(key)}" name="${esc(key)}" rows="3">${esc(key === 'Name' ? rec.name : rec.data[key] || '')}</textarea>`
+    : `<input id="mf-${esc(key)}" name="${esc(key)}" value="${esc(key === 'Name' ? rec.name : rec.data[key] || '')}" ${key === 'Name' ? 'required' : ''}>`}</div>`;
+  el.innerHTML = `<form class="panel" role="dialog" aria-modal="true" aria-labelledby="mf-title">
+    <header class="panel-head"><div><div class="eyebrow">${rec.kind === 'lead' ? 'Member lead · private' : 'Recruitment channel'}</div><h2 id="mf-title">${rec.id ? esc(rec.name) : rec.kind === 'lead' ? 'New lead' : 'New channel'}</h2>${rec.kind === 'lead' ? '<small>Only add people who shared their details with you or were referred with their permission.</small>' : ''}</div><button type="button" class="icon" id="mf-x" aria-label="Close">✕</button></header>
+    <div class="imp-body mform">${fields.map(field).join('')}</div>
+    <footer class="panel-foot">${rec.id ? '<button type="button" class="danger" id="mf-del">Delete</button>' : ''}<button type="button" id="mf-cancel">Cancel</button><button class="primary" id="mf-save">Save</button></footer></form>`;
+  document.body.append(el);
+  document.body.classList.add('locked');
+  const close = () => { el.remove(); document.body.classList.remove('locked'); membersView(); opener?.focus?.(); };
+  el.querySelector('#mf-x').addEventListener('click', close);
+  el.querySelector('#mf-cancel').addEventListener('click', close);
+  el.querySelector('#mf-del')?.addEventListener('click', async () => {
+    if (!confirm(`Delete ${rec.name}? This cannot be undone.`)) return;
+    try { await api('members/' + encodeURIComponent(rec.id) + '?version=' + rec.version, { method: 'DELETE' }); state.members = state.members.filter(r => r.id !== rec.id); notify(`${rec.name} deleted.`); close(); } catch (err) { notify(err.message, 'error'); }
+  });
+  el.querySelector('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const values = Object.fromEntries(new FormData(e.target));
+    const name = String(values.Name || '').trim();
+    if (!name) return;
+    delete values.Name;
+    const btn = el.querySelector('#mf-save'); btn.disabled = true;
+    if (await saveMember({ ...rec, name, data: { ...rec.data, ...values } })) close(); else btn.disabled = false;
+  });
+  el.querySelector('input, textarea, select')?.focus();
 }
 
 // ---------- pitch brief ----------

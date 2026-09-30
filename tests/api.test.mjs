@@ -191,3 +191,46 @@ test('/admin only redirects to the app; the worker still routes /api to the API'
   assert.equal((await worker.fetch(new Request(ORIGIN + '/api/sponsors'), env)).status, 200);
   assert.equal(await (await worker.fetch(new Request(ORIGIN + '/'), env)).text(), 'asset');
 });
+
+test('membership: public visitors see channels only; leads are admin-only in every mode', async () => {
+  const env = { ...setup(), AUTH_MODE: 'view' };
+  const admin = await issuer.sign();
+  const ch = await call(env, 'members', { method: 'POST', body: { kind: 'channel', name: 'Golf League', data: { Area: 'Philadelphia' } }, token: admin });
+  assert.equal(ch.status, 201);
+  assert.equal(ch.body.record.id, 'MC-001');
+  const lead = await call(env, 'members', { method: 'POST', body: { kind: 'lead', name: 'Jane Private', data: { Email: 'jane@example.com' } }, token: admin });
+  assert.equal(lead.body.record.id, 'ML-001');
+  assert.equal((await call(env, 'members', { method: 'POST', body: { kind: 'lead', name: 'Second', data: {} }, token: admin })).body.record.id, 'ML-002');
+
+  // Public, stale, forged and non-admin readers never receive a lead.
+  for (const token of [null, await issuer.sign({ exp: 1 }), await issuer.sign({ email: 'intruder@example.com' }), await (await fakeIssuer()).sign()]) {
+    const res = await call(env, 'members', { token });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.records.map(r => r.kind), ['channel']);
+    assert.equal(res.body.leadsVisible, false);
+    assert.doesNotMatch(JSON.stringify(res.body), /Jane|jane@/);
+  }
+  // Sponsors never include membership records.
+  assert.equal((await call(env, 'sponsors', { token: null })).body.records.length, 0);
+
+  // The admin sees everything and can edit with version checks.
+  const all = await call(env, 'members', { token: admin });
+  assert.equal(all.body.records.length, 3);
+  assert.equal(all.body.leadsVisible, true);
+  assert.equal((await call(env, 'members/ML-001', { method: 'PUT', body: { kind: 'lead', name: 'Jane P', data: {}, version: 1 }, token: admin })).status, 200);
+  assert.equal((await call(env, 'members/ML-001', { method: 'PUT', body: { kind: 'lead', name: 'Old', data: {}, version: 1 }, token: admin })).status, 409);
+
+  // Changes are refused for anyone but the admin, and bad input is rejected.
+  for (const [path, method, body] of [
+    ['members', 'POST', { kind: 'lead', name: 'X', data: {} }],
+    ['members/ML-001', 'PUT', { kind: 'lead', name: 'X', data: {}, version: 2 }],
+    ['members/ML-001?version=2', 'DELETE', undefined]
+  ]) assert.equal((await call(env, path, { method, body, token: null })).status, 403, method + ' ' + path);
+  assert.equal((await call(env, 'members', { method: 'POST', body: { kind: 'sponsor', name: 'X', data: {} }, token: admin })).status, 400);
+  assert.equal((await call(env, 'members', { method: 'POST', body: { kind: 'lead', name: '', data: {} }, token: admin })).status, 400);
+  assert.equal((await call(env, 'members/ML-001?version=2', { method: 'DELETE', token: admin })).status, 200);
+
+  // Outside public view mode, the whole membership API needs the admin login.
+  const closed = { ...setup() };
+  assert.equal((await call(closed, 'members', { token: null })).status, 401);
+});

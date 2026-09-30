@@ -60,6 +60,35 @@ async function readJSON(request, limit) {
 
 const row = r => ({ id: r.id, company: r.company, data: JSON.parse(r.data), version: r.version });
 
+const MEMBER_KINDS = { channel: 'MC', lead: 'ML' };
+const memberRow = r => ({ id: r.id, kind: r.kind, name: r.name, data: JSON.parse(r.data), version: r.version });
+
+// Leads are people, so they are only ever read for the verified admin. Public visitors get channels only.
+async function allMembers(db, admin) {
+  const sql = 'SELECT id, kind, name, data, version FROM members' + (admin ? '' : " WHERE kind = 'channel'") + ' ORDER BY kind, name COLLATE NOCASE, id';
+  const { results } = await db.prepare(sql).all();
+  return results.map(memberRow);
+}
+
+function cleanMember(input) {
+  if (!input || typeof input !== 'object') throw new HttpError(400, 'Invalid record.');
+  if (!Object.hasOwn(MEMBER_KINDS, input.kind)) throw new HttpError(400, 'Kind must be channel or lead.');
+  const data = cleanData(input.data);
+  const name = String(input.name ?? data.Name ?? '').trim();
+  if (!name || name.length > LIMITS.company) throw new HttpError(400, 'Name is required (200 characters max).');
+  data.Name = name;
+  const version = input.version === null || input.version === undefined ? null : Number(input.version);
+  if (version !== null && !Number.isInteger(version)) throw new HttpError(400, 'Invalid version.');
+  return { kind: input.kind, name, data, version };
+}
+
+async function nextMemberId(db, kind) {
+  const prefix = MEMBER_KINDS[kind];
+  const { results } = await db.prepare('SELECT id FROM members WHERE kind = ?1').bind(kind).all();
+  const max = results.reduce((m, r) => { const n = Number((r.id.match(new RegExp('^' + prefix + '-(\\d+)$')) || [])[1]); return Number.isFinite(n) && n > m ? n : m; }, 0);
+  return prefix + '-' + String(max + 1).padStart(3, '0');
+}
+
 async function allSponsors(db) {
   const { results } = await db.prepare('SELECT id, company, data, version FROM sponsors ORDER BY company COLLATE NOCASE, id').all();
   return results.map(row);
@@ -150,6 +179,41 @@ export async function handleApi(request, env) {
         const version = Number(url.searchParams.get('version'));
         const res = await db.prepare('DELETE FROM sponsors WHERE id = ?1 AND version = ?2').bind(id, version).run();
         if (!res.meta.changes) throw new HttpError(409, 'Prospect not found or changed elsewhere. Reload and try again.');
+        return json({ ok: true });
+      }
+    }
+
+    if (parts[0] === 'members' && parts.length === 1) {
+      if (method === 'GET') return json({ records: await allMembers(db, !!user), leadsVisible: !!user });
+      if (method === 'POST') {
+        const input = cleanMember(await readJSON(request, LIMITS.body));
+        const id = await nextMemberId(db, input.kind);
+        input.data.ID = id;
+        await db.prepare('INSERT INTO members (id, kind, name, data, version) VALUES (?1, ?2, ?3, ?4, 1)').bind(id, input.kind, input.name, JSON.stringify(input.data)).run();
+        return json({ record: { id, kind: input.kind, name: input.name, data: input.data, version: 1 } }, 201);
+      }
+    }
+
+    if (parts[0] === 'members' && parts.length === 2) {
+      const id = parts[1];
+      if (!ID.test(id)) throw new HttpError(400, 'Invalid ID.');
+      if (method === 'PUT') {
+        const input = cleanMember(await readJSON(request, LIMITS.body));
+        if (input.version === null) throw new HttpError(400, 'Version is required.');
+        input.data.ID = id;
+        const res = await db.prepare('UPDATE members SET kind = ?1, name = ?2, data = ?3, version = version + 1 WHERE id = ?4 AND version = ?5')
+          .bind(input.kind, input.name, JSON.stringify(input.data), id, input.version).run();
+        if (!res.meta.changes) {
+          const current = await db.prepare('SELECT id, kind, name, data, version FROM members WHERE id = ?1').bind(id).first();
+          if (!current) throw new HttpError(404, 'Record not found.');
+          return json({ error: 'This record changed elsewhere. Reload it before saving.', record: memberRow(current) }, 409);
+        }
+        return json({ record: { id, kind: input.kind, name: input.name, data: input.data, version: input.version + 1 } });
+      }
+      if (method === 'DELETE') {
+        const version = Number(url.searchParams.get('version'));
+        const res = await db.prepare('DELETE FROM members WHERE id = ?1 AND version = ?2').bind(id, version).run();
+        if (!res.meta.changes) throw new HttpError(409, 'Record not found or changed elsewhere. Reload and try again.');
         return json({ ok: true });
       }
     }

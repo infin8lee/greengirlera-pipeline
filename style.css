@@ -495,3 +495,33 @@ body.view-only .letter-body, body.view-only .lm-row.subject .subject-input { cur
 .plan-score tr { display: table-row; padding: 0; border: 0; margin: 0; background: none; box-shadow: none; }
 .plan-score th, .plan-score td { display: table-cell; width: auto; }
 .plan-score th::before, .plan-score td::before { content: none; }
+
+/* Membership */
+.members { max-width: 1200px; }
+.members .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mtabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.mtabs [role=tab] { background: none; border: 0; border-radius: 0; padding: 10px 4px; margin-right: 14px; font-weight: 700; color: var(--muted); box-shadow: inset 0 -2px 0 transparent; min-height: 44px; }
+.mtabs [role=tab].on { color: var(--forest); box-shadow: inset 0 -3px 0 var(--blush); }
+.mtabs .n { font-weight: 600; font-size: 12px; background: var(--sage-soft); border-radius: 10px; padding: 1px 7px; margin-left: 4px; }
+.mtabs #m-add { margin-left: auto; }
+.members .chips { margin-bottom: 16px; }
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.mcard { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.mcard header { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.mcard h3 { font-family: var(--serif); font-size: 17px; margin: 0; color: var(--forest); }
+.mcard p { margin: 0; font-size: 14px; }
+.mcard .mnext { background: var(--mist); border-radius: 8px; padding: 8px 10px; }
+.mlinks { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 14px; overflow-wrap: anywhere; }
+.mcard details summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--blush-deep); }
+.mmsg { white-space: pre-wrap; font: 14px/1.55 var(--sans); background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+.mcard footer { margin-top: auto; padding-top: 8px; display: flex; gap: 8px; align-items: center; }
+.mcard footer select { width: auto; }
+.mform .field { margin-bottom: 12px; }
+.mform label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.mform input, .mform select, .mform textarea { width: 100%; }
+@media (max-width: 899px) { .members .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) {
+  .mgrid { grid-template-columns: 1fr; }
+  .tabsnav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; padding: 0 6px; }
+  .navlink { padding: 8px 2px; min-height: 40px; }
+}

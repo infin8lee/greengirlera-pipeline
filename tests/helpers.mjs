@@ -1,10 +1,11 @@
 // Test helpers: a D1-compatible wrapper over node:sqlite and a fake Access issuer.
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 export function fakeD1() {
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(new URL('../migrations/0001_init.sql', import.meta.url), 'utf8'));
+  const dir = new URL('../migrations/', import.meta.url);
+  for (const f of readdirSync(dir).filter(f => f.endsWith('.sql')).sort()) db.exec(readFileSync(new URL(f, dir), 'utf8'));
   const stmt = (sql, params = []) => ({
     bind: (...p) => stmt(sql, p),
     all: async () => ({ results: db.prepare(sql).all(...params) }),
