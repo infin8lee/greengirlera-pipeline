@@ -40,8 +40,12 @@ The project is the Worker **greengirlera-pipeline** connected to this repository
 2. **First load only:** click Import CSV and choose `Green_Girl_Era_Sponsor_Pipeline.csv`, review, and confirm. Then import `Green_Girl_Era_Personalized_Outreach.csv`, which joins on Prospect ID.
    - *Fill empty fields only* (the default) never overwrites values you already have.
    - *Replace with CSV values* is an explicit choice.
-3. Click a prospect to edit Overview, Pitch studio, Research & sources, or All fields (every column). You're warned before closing with unsaved changes.
-4. **Pitch studio:** edit and copy the subject, body, follow-up subject and follow-up body. *Compose suggestion* builds a new draft from the prospect's saved facts and your Pitch brief, in your browser, with no AI service or outside API. It shows placeholders for anything unconfirmed. It only replaces your draft after you choose *Use in editor*, and only saves when you click Save. **Nothing is ever emailed from the app.**
+3. **Sponsors** (the home screen) is a lookbook. Pick a sponsor on the left, filtering by category or market chips or by search, to see:
+   - **Who they are:** why they fit, what to ask for, who to reach, how to reach them, the next step, cautions and research links.
+   - **Your sponsorship email:** the tailored request and follow-up. They're editable in place, with Copy email, Copy subject, Copy body and Open in my email app buttons, plus a draft status. Sponsors that only accept forms or portals link straight to their form.
+   - **Suggest a rewrite:** builds a fresh version from the sponsor's saved facts and your Pitch brief, in your browser, with no AI or outside service. It only replaces the email after you choose *Use this version*.
+   - **Tracking & notes, Research details, Every field:** edit any stored column. A save bar appears whenever something changes (Ctrl/Cmd+S also saves), and you're warned before leaving with unsaved edits.
+4. **Pipeline** and **Stages** give the at-a-glance table, totals and stage board. Any row opens that sponsor. **Nothing is ever emailed from the app.**
 5. **Export CSV** downloads every record and column, including drafts. Treat the file as private.
 
 ## Development
