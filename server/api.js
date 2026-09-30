@@ -61,6 +61,18 @@ async function allSponsors(db) {
   return results.map(row);
 }
 
+// While unconfigured, show the admin the (non-secret) team domain and audience
+// from the Access token they already hold. These values are never trusted here:
+// once configured, every token is verified against them.
+function setupHint(request) {
+  try {
+    const payload = JSON.parse(atob(tokenFrom(request).split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const aud = Array.isArray(payload.aud) ? payload.aud[0] : payload.aud;
+    if (typeof payload.iss !== 'string' || !/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(payload.iss) || typeof aud !== 'string' || !/^[a-f0-9]{32,128}$/.test(aud)) return null;
+    return { ACCESS_TEAM_DOMAIN: payload.iss, ACCESS_AUD: aud };
+  } catch { return null; }
+}
+
 async function authenticate(request, env) {
   const token = tokenFrom(request);
   if (!token) throw new HttpError(401, 'Sign-in required.');
@@ -80,7 +92,7 @@ function checkOrigin(request) {
 
 export async function handleApi(request, env) {
   try {
-    if (!env.DB || !env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) throw new HttpError(503, 'The CRM backend is not configured yet.');
+    if (!env.DB || !env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) return json({ error: 'The CRM backend is not configured yet.', setup: setupHint(request) }, 503);
     const user = await authenticate(request, env);
     checkOrigin(request);
     const url = new URL(request.url);

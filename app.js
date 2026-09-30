@@ -80,6 +80,15 @@ function sessionExpired() {
   screen('Please sign in again', `Your secure session has ended.${pending ? ' Unsaved edits could not be kept.' : ''} Sign in with a one-time code sent to the admin inbox.`, `<a class="button primary" href="/">Continue to sign in</a>`);
 }
 
+function setupScreen(setup) {
+  if (!setup) return screen('Almost ready', 'The private backend is not configured yet. Add ACCESS_TEAM_DOMAIN and ACCESS_AUD to the Worker variables (see the README).');
+  const rows = Object.entries(setup).map(([k, v]) => `<div class="setup-row"><span>${esc(k)}</span><code>${esc(v)}</code><button type="button" class="small-btn" data-copy="${esc(v)}">Copy</button></div>`).join('');
+  screen('Almost ready', 'One last step. In Cloudflare, open the Worker <b>greengirlera-pipeline</b>, go to <b>Settings → Variables and Secrets</b>, add these two text variables, then deploy.', `<div class="setup-vars">${rows}</div><p class="small muted">These identify your Cloudflare Access login and are not secret.</p><a class="button" href="/">Reload after saving</a>`);
+  root.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; } catch { b.textContent = 'Select and copy'; }
+  }));
+}
+
 async function boot() {
   screen('Opening your workspace…', 'Checking your secure session.');
   try {
@@ -88,7 +97,7 @@ async function boot() {
   } catch (err) {
     if (err.status === 401) return screen('Sign in required', 'This private workspace is protected by an email one-time code. Only the workspace admin can sign in.', `<a class="button primary" href="/">Sign in</a>`);
     if (err.status === 403) return screen('Access restricted', 'This workspace is restricted to its admin. You are signed in with a different email.', `<a class="button" href="/cdn-cgi/access/logout">Sign out</a>`);
-    if (err.status === 503) return screen('Almost ready', 'The private backend is not configured yet. See the setup steps in the README.');
+    if (err.status === 503) return setupScreen(err.body?.setup);
     return screen('Workspace unavailable', esc(err.message), `<button class="primary" id="retry">Try again</button>`), document.querySelector('#retry').addEventListener('click', boot);
   }
   try {

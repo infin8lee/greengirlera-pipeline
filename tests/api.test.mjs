@@ -94,3 +94,15 @@ test('session endpoint confirms the admin identity', async () => {
   const out = await call(setup(), 'session');
   assert.equal(out.body.email, 'lee@virtual-lee.com');
 });
+
+test('unconfigured backend shows only the setup hint from a real Access token shape', async () => {
+  const env = { DB: fakeD1() };
+  const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const tok = b64({ alg: 'RS256' }) + '.' + b64({ iss: 'https://myteam.cloudflareaccess.com', aud: ['a'.repeat(64)], email: 'lee@virtual-lee.com' }) + '.sig';
+  const out = await call(env, 'session', { token: tok });
+  assert.equal(out.status, 503);
+  assert.deepEqual(out.body.setup, { ACCESS_TEAM_DOMAIN: 'https://myteam.cloudflareaccess.com', ACCESS_AUD: 'a'.repeat(64) });
+  const junk = await call(env, 'session', { token: b64({}) + '.' + b64({ iss: 'javascript:x', aud: '<b>' }) + '.s' });
+  assert.equal(junk.body.setup, null);
+  assert.equal((await call(env, 'sponsors', { token: null })).body.setup, null);
+});
