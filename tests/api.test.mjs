@@ -106,3 +106,88 @@ test('unconfigured backend shows only the setup hint from a real Access token sh
   assert.equal(junk.body.setup, null);
   assert.equal((await call(env, 'sponsors', { token: null })).body.setup, null);
 });
+
+const body1 = { company: 'A', data: {} };
+const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
+
+test('public view mode: everyone can read, only a verified admin can change anything', async () => {
+  const env = { ...setup(), AUTH_MODE: 'view' };
+  const admin = await issuer.sign();
+  const seed = await call(env, 'sponsors', { method: 'POST', body: { company: 'Seed Co', data: {} }, token: admin });
+  assert.equal(seed.status, 201);
+  const id = seed.body.record.id;
+
+  // Public visitors can read.
+  const list = await call(env, 'sponsors', { token: null });
+  assert.equal(list.status, 200);
+  assert.equal(list.body.records.length, 1);
+  assert.equal((await call(env, 'settings/brief', { token: null })).status, 200);
+  const anon = await call(env, 'session', { token: null });
+  assert.deepEqual([anon.body.email, anon.body.publicView, anon.body.readOnly], [null, true, true]);
+
+  // ...but every kind of change is refused, and nothing is altered.
+  for (const [path, method, body] of [
+    ['sponsors', 'POST', body1],
+    ['sponsors/' + id, 'PUT', { company: 'Hacked', data: {}, version: 1 }],
+    ['sponsors/' + id + '?version=1', 'DELETE', undefined],
+    ['import', 'POST', { records: [{ id: 'T-9', company: 'X', data: {} }] }],
+    ['settings/brief', 'PUT', { brief: { organization: 'x' } }]
+  ]) {
+    const res = await call(env, path, { method, body, token: null });
+    assert.equal(res.status, 403, method + ' ' + path);
+    assert.match(res.body.error, /view-only/);
+  }
+  const after = await call(env, 'sponsors', { token: null });
+  assert.equal(after.body.records.length, 1);
+  assert.equal(after.body.records[0].company, 'Seed Co');
+
+  // Stale, forged and non-admin logins never grant edit rights.
+  assert.equal((await call(env, 'sponsors', { method: 'POST', body: body1, token: await issuer.sign({ exp: 1 }) })).status, 401);
+  assert.equal((await call(env, 'sponsors', { method: 'POST', body: body1, token: await issuer.sign({ email: 'intruder@example.com' }) })).status, 403);
+  assert.equal((await call(env, 'sponsors', { method: 'POST', body: body1, token: await (await fakeIssuer()).sign() })).status, 401);
+  // A bad token on a read just means "public visitor".
+  const stale = await call(env, 'session', { token: await issuer.sign({ exp: 1 }) });
+  assert.equal(stale.status, 200);
+  assert.deepEqual([stale.body.email, stale.body.readOnly], [null, true]);
+
+  // The verified admin can manage everything.
+  const me = await call(env, 'session', { token: admin });
+  assert.deepEqual([me.body.email, me.body.readOnly], ['lee@virtual-lee.com', false]);
+  assert.equal((await call(env, 'sponsors/' + id, { method: 'PUT', body: { company: 'Seed Co 2', data: {}, version: 1 }, token: admin })).status, 200);
+  assert.equal((await call(env, 'settings/brief', { method: 'PUT', body: { brief: { organization: 'Org' } }, token: admin })).status, 200);
+  assert.equal((await call(env, 'sponsors/' + id + '?version=2', { method: 'DELETE', token: admin })).status, 200);
+  // The same-origin rule still applies to the admin.
+  assert.equal((await call(env, 'sponsors', { method: 'POST', body: body1, token: admin, origin: 'https://evil.example.com' })).status, 403);
+});
+
+test('public view mode before the admin login is configured: readable, changes refused, setup hint only for a token holder', async () => {
+  const env = { DB: fakeD1(), AUTH_MODE: 'view' };
+  assert.equal((await call(env, 'sponsors', { token: null })).status, 200);
+  assert.equal((await call(env, 'sponsors', { method: 'POST', body: body1, token: null })).status, 403);
+  const tok = b64({ alg: 'RS256' }) + '.' + b64({ iss: 'https://myteam.cloudflareaccess.com', aud: ['a'.repeat(64)], email: 'lee@virtual-lee.com' }) + '.sig';
+  assert.equal((await call(env, 'sponsors', { method: 'POST', body: body1, token: tok })).status, 403);
+  assert.deepEqual((await call(env, 'session', { token: tok })).body.setup, { ACCESS_TEAM_DOMAIN: 'https://myteam.cloudflareaccess.com', ACCESS_AUD: 'a'.repeat(64) });
+  assert.equal((await call(env, 'session', { token: null })).body.setup, null);
+  assert.equal((await call(env, 'session', { token: b64({}) + '.' + b64({ iss: 'javascript:x', aud: '<b>' }) + '.s' })).body.setup, null);
+});
+
+test('without AUTH_MODE=view the API still fails closed, and "open" is not a mode', async () => {
+  assert.equal((await call({ DB: fakeD1() }, 'sponsors', { token: null })).status, 503);
+  assert.equal((await call({ DB: fakeD1(), AUTH_MODE: 'open' }, 'sponsors', { token: null })).status, 503);
+  assert.equal((await call({ DB: fakeD1(), AUTH_MODE: 'View' }, 'sponsors', { token: null })).status, 503);
+  assert.equal((await call({ ...setup(), AUTH_MODE: 'open' }, 'sponsors', { token: null })).status, 401);
+  assert.equal((await call(setup(), 'sponsors', { token: null })).status, 401);
+  assert.equal((await call({ AUTH_MODE: 'view' }, 'sponsors', { token: null })).status, 503);
+});
+
+test('/admin only redirects to the app; the worker still routes /api to the API', async () => {
+  const { default: worker } = await import('../src/worker.js');
+  const env = { DB: fakeD1(), AUTH_MODE: 'view', ASSETS: { fetch: async () => new Response('asset') } };
+  for (const path of ['/admin', '/admin/x']) {
+    const res = await worker.fetch(new Request(ORIGIN + path), env);
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.get('location'), '/');
+  }
+  assert.equal((await worker.fetch(new Request(ORIGIN + '/api/sponsors'), env)).status, 200);
+  assert.equal(await (await worker.fetch(new Request(ORIGIN + '/'), env)).text(), 'asset');
+});
