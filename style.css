@@ -525,3 +525,8 @@ body.view-only .letter-body, body.view-only .lm-row.subject .subject-input { cur
   .tabsnav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; padding: 0 6px; }
   .navlink { padding: 8px 2px; min-height: 40px; }
 }
+/* Desktop rail has a fixed height: keep the sponsor list reachable when every category is shown */
+@media (min-width: 900px) {
+  .cats.open .chips.wrap { max-height: 34vh; overflow-y: auto; overscroll-behavior: contain; }
+  .rail-list { min-height: 160px; }
+}
