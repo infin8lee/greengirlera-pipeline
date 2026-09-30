@@ -1,0 +1,14 @@
+# Cloudflare Pages configuration (source of truth for bindings).
+# IDs here are not secrets: they only work with an authenticated Cloudflare account.
+# ACCESS_TEAM_DOMAIN and ACCESS_AUD are set as Pages environment variables in the
+# dashboard; the API refuses every request until both are present.
+name = "greengirlera-pipeline"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "greengirlera-crm"
+database_id = "67ad28ca-db48-48a7-8455-e3fe703f1248"
+preview_database_id = "DB"
+migrations_dir = "migrations"

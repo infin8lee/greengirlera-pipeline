@@ -1,0 +1,15 @@
+# Private data never belongs in this public repository.
+*.csv
+*.sql.private
+private-import/
+seed/
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+.wrangler/
+node_modules/
+dist/
+test-results/
+playwright-report/
+.DS_Store
