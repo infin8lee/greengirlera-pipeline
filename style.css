@@ -190,6 +190,7 @@ main:focus { outline: none; }
 .lm-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 12px 0; font-size: 14px; }
 .lm-row + .lm-row { border-top: 1px solid var(--line); }
 .lm-row > span, .lm-row > label { width: 64px; flex: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--blush-deep); }
+.warn { display: block; color: var(--blush-deep); font-size: 13px; font-weight: 600; }
 .lm-row em { font-style: normal; color: var(--muted); font-size: 13px; }
 .lm-row.subject { align-items: center; }
 .lm-row.subject .subject-input { flex: 1; border: 0; padding: 4px 0; resize: none; overflow: hidden; min-height: 0; line-height: 1.45; font: 700 16px/1.45 var(--serif); color: var(--forest); background: transparent; min-width: 200px; border-radius: 0; }

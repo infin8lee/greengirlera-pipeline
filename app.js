@@ -82,6 +82,8 @@ const tone = r => `--mono-h:${(hue(r.data.Category || 'x') % 60) + 110}`; // sta
 const FIT_ORDER = ['Strong', 'Good', 'Possible', 'Weak', 'Not a fit'];
 const fitClass = f => 'fit-' + String(f || 'unrated').toLowerCase().replace(/[^a-z]+/g, '-');
 const fitBadge = f => f ? `<span class="fit ${fitClass(f)}">${esc(f === 'Not a fit' ? 'Not a fit' : f + ' fit')}</span>` : '';
+const unconfirmed = d => d['Contact verified'] === 'No' || !!(d['Unconfirmed email'] || '').trim();
+const unconfirmedNote = d => unconfirmed(d) ? `<small class="warn">Contact not confirmed on an official page${d['Unconfirmed email'] ? ` (unconfirmed: ${esc(d['Unconfirmed email'])})` : ''}. Check before sending.</small>` : '';
 const lines = v => String(v || '').split(/\n+/).map(x => x.trim()).filter(Boolean);
 const wave = p => /^1\b/.test(p || '') ? 'First wave' : /^3\b/.test(p || '') ? 'Qualify first' : /^2\b/.test(p || '') ? 'Second wave' : (p || '');
 
@@ -303,7 +305,7 @@ function drawDossier() {
           ${d['How they sponsor'] ? `<div class="fact wide direction"><span class="fact-label">How they sponsor</span><p>${esc(d['How they sponsor'])}</p>${d['What they could provide'] ? `<p class="provide"><b>What they could provide:</b> ${esc(d['What they could provide'])}</p>` : ''}</div>` : ''}
           <div class="fact"><span class="fact-label">What to ask for</span><p>${esc(d['Suggested sponsor ask'] || 'To decide')}</p></div>
           <div class="fact"><span class="fact-label">Who to reach</span><p>${esc(hasName(d) ? d['Name / target'] : 'Name not publicly listed')}${d['Contact role'] ? `<small>${esc(d['Contact role'])}</small>` : ''}</p></div>
-          <div class="fact"><span class="fact-label">How to reach them</span><p>${email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : 'No public email'}<small>${esc(d['Contact route'] || 'Route to confirm')}${d['Outreach contact route'] ? ` · ${esc(d['Outreach contact route'])}` : ''}</small>${contactUrl ? `<a class="source" href="${esc(contactUrl)}" target="_blank" rel="noopener noreferrer">Contact page ↗</a>` : ''}</p></div>
+          <div class="fact"><span class="fact-label">How to reach them</span><p>${email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : 'No public email'}${unconfirmedNote(d)}<small>${esc(d['Contact route'] || 'Route to confirm')}${d['Outreach contact route'] ? ` · ${esc(d['Outreach contact route'])}` : ''}</small>${contactUrl ? `<a class="source" href="${esc(contactUrl)}" target="_blank" rel="noopener noreferrer">Contact page ↗</a>` : ''}</p></div>
           <div class="fact"><span class="fact-label">Next step</span><p>${esc(d['Next action'] || 'Review and decide')}</p></div>
           ${d['Qualification / limits'] ? `<div class="fact wide caution"><span class="fact-label">Keep in mind</span><p>${esc(d['Qualification / limits'])}</p></div>` : ''}
           ${d['Source evidence'] || uniqueSources.length ? `<div class="fact wide"><span class="fact-label">Research${d['Verification confidence'] ? ` · verification confidence: ${esc(d['Verification confidence'])}` : ''}</span><p>${esc(d['Source evidence'] || '')}</p>${d['Verification notes'] ? `<p class="vnotes">${esc(d['Verification notes'])}</p>` : ''}${d['Fit explanation'] && d['Why it fits GGE'] ? `<p class="small muted">Original research note: ${esc(d['Why it fits GGE'])}</p>` : ''}<div class="source-list">${uniqueSources.map(u => `<a class="source" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(new URL(u).hostname.replace(/^www\./, ''))} ↗</a>`).join('')}</div></div>` : ''}
@@ -433,7 +435,7 @@ function drawLetter() {
   const status = d['Draft status'] || 'Draft';
   box.innerHTML = `
     <div class="letter-meta">
-      <div class="lm-row"><span>To</span><b>${email ? esc(email) : 'No public email'}</b>${portal ? `<em>${contactUrl ? `Send through their <a href="${esc(contactUrl)}" target="_blank" rel="noopener noreferrer">form or portal ↗</a>` : 'Use their form or portal'}</em>` : ''}</div>
+      <div class="lm-row"><span>To</span><b>${email ? esc(email) : 'No public email'}</b>${unconfirmedNote(d)}${portal ? `<em>${contactUrl ? `Send through their <a href="${esc(contactUrl)}" target="_blank" rel="noopener noreferrer">form or portal ↗</a>` : 'Use their form or portal'}</em>` : ''}</div>
       <div class="lm-row subject"><label for="l-subject">Subject</label><textarea id="l-subject" class="autogrow subject-input" rows="1" data-key="${esc(l.subject)}" placeholder="Subject line">${esc(d[l.subject] || '')}</textarea></div>
     </div>
     <label class="sr" for="l-body">${esc(l.label)} body</label>
