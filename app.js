@@ -1,8 +1,9 @@
 import { STAGES, DRAFT_FIELDS, PIPELINE_COLUMNS, OUTREACH_COLUMNS, esc, parseCSV, csv, safeURL, money, amount, stage, planImport, exportRows, composeDraft, isPortalRoute } from './core.js';
 
 const root = document.querySelector('#app');
-const CREST = `<svg class="crest" viewBox="0 0 64 74" aria-hidden="true" focusable="false"><path d="M32 3 58 12v24c0 17-11 29-26 35C17 65 6 53 6 36V12z" fill="#1f4a3a" stroke="#c9a96e" stroke-width="3"/><path d="M32 9 52 16v20c0 13-8.5 23-20 28-11.5-5-20-15-20-28V16z" fill="none" stroke="#e8a0ab" stroke-width="1.4"/><text x="32" y="43" text-anchor="middle" font-family="'Libre Baskerville', Georgia, serif" font-weight="700" font-size="17" fill="#eea3ae" letter-spacing=".5">GGE</text><path d="M29 49h6l-2 2v7h-2v-7z" fill="#c9a96e"/></svg>`;
-const brand = (sub = 'Sponsor Studio') => `<div class="brandmark">${CREST}<span class="bm-text"><small>Est. 2026</small><b>Green Girl Era</b>${sub ? `<em>${sub}</em>` : ''}</span></div>`;
+const CREST = `<img class="crest" src="./assets/gge-crest.png" alt="" width="218" height="241">`;
+const LOCKUP = `<img class="lockup" src="./assets/gge-lockup.png" alt="Green Girl Era crest: Live. Play. Empower." width="218" height="276">`;
+const brand = (sub = 'Sponsor Studio', mark = true) => `<div class="brandmark">${mark ? CREST : ''}<span class="bm-text"><small>Est. 2026</small><b>Green Girl Era</b>${sub ? `<em>${sub}</em>` : ''}</span></div>`;
 
 const DEFAULT_BRIEF = {
   organization: 'Green Girl Era',
@@ -82,7 +83,7 @@ const wave = p => /^1\b/.test(p || '') ? 'First wave' : /^3\b/.test(p || '') ? '
 
 // ---------- screens ----------
 function screen(title, message, actions = '') {
-  root.innerHTML = `<div class="gate"><div class="gate-card">${brand()}<h1>${title}</h1><p>${message}</p>${actions}</div></div>`;
+  root.innerHTML = `<div class="gate"><div class="gate-card">${LOCKUP}${brand('Sponsor Studio', false)}<h1>${title}</h1><p>${message}</p>${actions}</div></div>`;
 }
 
 function sessionExpired() {
@@ -260,7 +261,7 @@ function drawDossier() {
   const box = document.querySelector('#dossier');
   if (!box) return;
   if (!state.current) {
-    box.innerHTML = `<div class="dossier-empty">${CREST}<p>Choose a sponsor to see who they are and your tailored sponsorship request.</p></div>`;
+    box.innerHTML = `<div class="dossier-empty">${LOCKUP}<p>Choose a sponsor to see who they are and your tailored sponsorship request.</p></div>`;
     return;
   }
   const c = state.current, r = c.record, d = r.data, isNew = !r.id;

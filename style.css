@@ -67,7 +67,8 @@ input:focus, textarea:focus, select:focus { outline: 3px solid var(--focus); out
 
 .eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 700; color: var(--blush-deep); margin-bottom: 8px; }
 .brandmark { display: flex; align-items: center; gap: 12px; color: var(--forest); text-decoration: none; }
-.crest { width: 40px; height: 46px; flex: none; }
+.crest { width: auto; height: 48px; flex: none; display: block; }
+.lockup { width: 150px; height: auto; display: block; margin: 0 auto 16px; }
 .bm-text { display: flex; flex-direction: column; line-height: 1.1; }
 .bm-text small { font: 800 10px var(--sans); letter-spacing: .16em; text-transform: uppercase; color: inherit; opacity: .8; }
 .bm-text b { font: 700 19px var(--serif); }
@@ -85,8 +86,8 @@ input:focus, textarea:focus, select:focus { outline: 3px solid var(--focus); out
 /* Gate screens */
 .gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--cream); }
 .gate-card { max-width: 480px; width: 100%; background: var(--paper); border: 1px solid var(--line); border-radius: 22px; padding: 40px 36px; box-shadow: var(--shadow); text-align: center; }
-.gate-card .brandmark { justify-content: center; margin-bottom: 28px; }
-.gate-card .crest { width: 56px; height: 64px; }
+.gate-card .brandmark { justify-content: center; margin-bottom: 24px; }
+.gate-card .bm-text { align-items: center; }
 .gate-card { background: var(--paper); border-top: 4px solid var(--forest); }
 .gate-card p { color: var(--muted); }
 .setup-vars { text-align: left; margin: 18px 0 10px; display: grid; gap: 10px; }
@@ -147,7 +148,7 @@ main:focus { outline: none; }
 
 .dossier { min-width: 0; padding: 36px clamp(20px, 4vw, 56px) 120px; }
 .dossier-empty { min-height: 60vh; display: grid; place-content: center; justify-items: center; text-align: center; color: var(--muted); gap: 16px; }
-.dossier-empty .crest { width: 72px; height: 84px; }
+.dossier-empty .lockup { width: 170px; margin-bottom: 4px; }
 .back { display: none; }
 .profile { max-width: 860px; margin: 0 auto; }
 
@@ -349,7 +350,7 @@ tbody tr:hover { background: var(--sage-soft); }
 @media (max-width: 899px) {
   :root { --mast: 108px; }
   .masthead { padding: 10px 14px 0; gap: 6px 10px; align-items: center; }
-  .masthead .crest { width: 32px; height: 37px; }
+  .masthead .crest { height: 40px; }
   .masthead .bm-text small { display: none; }
   .masthead .bm-text b { font-size: 17px; }
   .mast-actions { gap: 6px; }
