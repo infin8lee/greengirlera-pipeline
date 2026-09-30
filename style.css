@@ -423,3 +423,14 @@ body.view-only .letter-body, body.view-only .lm-row.subject .subject-input { cur
 .fact .provide { margin-top: 10px; font-size: 14px; }
 .fact .vnotes { margin-top: 10px; font-size: 14px; color: var(--ink); }
 .fact p + .small { margin-top: 10px; }
+
+/* Decision makers */
+.people { margin-top: 28px; }
+.people .angle { margin: 0 0 14px; line-height: 1.55; }
+.people-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.person { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; min-width: 0; }
+.person-name { font-family: 'Libre Baskerville', Georgia, serif; font-size: 17px; color: var(--forest); }
+.person-name small { display: block; font-family: Inter, system-ui, sans-serif; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.person p { margin: 8px 0; font-size: 14px; line-height: 1.5; }
+.person-links { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 14px; overflow-wrap: anywhere; }
+.people .channel { margin: 12px 0 0; font-size: 14px; overflow-wrap: anywhere; }
