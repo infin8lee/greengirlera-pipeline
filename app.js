@@ -33,7 +33,7 @@ const state = {
   filters: { q: '', category: '', stage: '', priority: '', market: '', fit: '', sort: 'priority' },
   current: null, // { record, original, composed, letter }
   briefDirty: false,
-  publicView: false, readOnly: false
+  publicView: false, readOnly: false, catsOpen: false
 };
 
 // ---------- utilities ----------
@@ -230,9 +230,12 @@ function sponsorsView() {
       <div class="rail-head">
         <h1 class="rail-title">Sponsors <span>${state.records.length}</span></h1>
         <label class="search"><span class="sr">Search sponsors</span><input id="q" type="search" placeholder="Search by name, category, ask…" value="${esc(f.q)}"></label>
-        <div class="chips" role="group" aria-label="Filter by category">
-          <button class="chip ${!f.category ? 'on' : ''}" data-cat="">All</button>
-          ${categories().map(c => `<button class="chip ${f.category === c ? 'on' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}
+        <div class="cats ${state.catsOpen || f.category ? 'open' : ''}">
+          <div class="chips wrap" id="cat-chips" role="group" aria-label="Filter by category">
+            <button class="chip ${!f.category ? 'on' : ''}" data-cat="">All <span class="n">${state.records.length}</span></button>
+            ${categories().map(c => `<button class="chip ${f.category === c ? 'on' : ''}" data-cat="${esc(c)}">${esc(c)} <span class="n">${state.records.filter(r => r.data.Category === c).length}</span></button>`).join('')}
+          </div>
+          <button type="button" class="cats-more" id="cats-more" aria-controls="cat-chips" aria-expanded="${state.catsOpen || f.category ? 'true' : 'false'}">${state.catsOpen || f.category ? 'Fewer categories' : `All ${categories().length} categories`}</button>
         </div>
         ${state.records.some(r => r.data['Fit rating']) ? `<div class="chips small" role="group" aria-label="Filter by fit">
           ${[['', 'Any fit'], ...FIT_ORDER.filter(x => state.records.some(r => r.data['Fit rating'] === x)).map(x => [x, x])].map(([v, l]) => `<button class="chip ${f.fit === v ? 'on' : ''}" data-fit="${esc(v)}">${esc(l)}</button>`).join('')}
@@ -246,6 +249,7 @@ function sponsorsView() {
     <section class="dossier" id="dossier" aria-live="polite"></section>
   </div>`;
   content.querySelector('#q').addEventListener('input', e => { f.q = e.target.value; drawRail(); });
+  content.querySelector('#cats-more')?.addEventListener('click', e => { const box = e.currentTarget.closest('.cats'); const open = !box.classList.contains('open'); state.catsOpen = open; box.classList.toggle('open', open); e.currentTarget.setAttribute('aria-expanded', String(open)); e.currentTarget.textContent = open ? 'Fewer categories' : `All ${categories().length} categories`; });
   content.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => { f.category = b.dataset.cat; content.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('on', x === b)); drawRail(); }));
   content.querySelectorAll('[data-fit]').forEach(b => b.addEventListener('click', () => { f.fit = b.dataset.fit; content.querySelectorAll('[data-fit]').forEach(x => x.classList.toggle('on', x === b)); drawRail(); }));
   content.querySelectorAll('[data-market]').forEach(b => b.addEventListener('click', () => { f.market = b.dataset.market; content.querySelectorAll('[data-market]').forEach(x => x.classList.toggle('on', x === b)); drawRail(); }));
@@ -319,7 +323,7 @@ function drawDossier() {
       <header class="hero">
         <span class="mono big" style="${tone(r)}" aria-hidden="true">${esc(initials(company || 'New'))}</span>
         <div class="hero-text">
-          <div class="eyebrow">${isNew ? 'New sponsor' : esc([d.Category, wave(d.Priority)].filter(Boolean).join(' · '))}</div>
+          <div class="eyebrow">${isNew ? 'New sponsor' : [d.Category ? `<span class="cat-name">${esc(d.Category)}</span>` : '', esc(wave(d.Priority))].filter(Boolean).join(' · ')}</div>
           ${isNew ? `<label class="sr" for="f-Company">Company</label><input id="f-Company" class="hero-input" data-key="Company" placeholder="Company name" value="${esc(company)}">` : `<h2 tabindex="-1">${esc(company)}</h2>`}
           <p class="hero-sub">${fitBadge(d['Fit rating'])}${esc(d['Market / coverage'] || 'Market to confirm')}${d['Imported stage'] ? ` · marked “${esc(d['Imported stage'])}”` : ''}</p>
         </div>
