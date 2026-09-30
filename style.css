@@ -360,8 +360,8 @@ tbody tr:hover { background: var(--sage-soft); }
   .masthead #new::before { content: '+'; font-size: 22px; font-weight: 600; line-height: 1; }
   .menu summary { min-height: 36px; padding: 6px 10px; font-size: 11px; }
   .masthead .view-note { display: none; }
-  .tabsnav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; margin: 0 -14px; width: calc(100% + 28px); border-top: 1px solid rgba(255, 248, 241, .12); }
-  .navlink { justify-content: center; font-size: 11px; letter-spacing: .06em; padding: 10px 2px; min-height: 44px; white-space: nowrap; }
+  .tabsnav { display: flex; justify-content: space-between; gap: 2px; overflow: visible; margin: 0 -14px; width: calc(100% + 28px); border-top: 1px solid rgba(255, 248, 241, .12); padding: 0 8px; }
+  .navlink { flex: 0 1 auto; justify-content: center; font-size: 11px; letter-spacing: .06em; padding: 10px 4px; min-height: 44px; white-space: normal; line-height: 1.2; text-align: center; }
   input, textarea, select { font-size: 16px; }              /* stops iOS zoom on focus */
   .rail-head { padding: 16px 14px 10px; }
   .rail-list { padding: 6px 6px 24px; }
@@ -446,7 +446,7 @@ body.view-only .letter-body, body.view-only .lm-row.subject .subject-input { cur
 /* Every filter row wraps instead of scrolling off-screen */
 .chips { flex-wrap: wrap; overflow: visible; }
 @media (max-width: 380px) {
-  .navlink { font-size: 10px; letter-spacing: .02em; white-space: normal; line-height: 1.15; text-align: center; }
+  .navlink { font-size: 10px; letter-spacing: 0; white-space: normal; line-height: 1.15; text-align: center; padding: 10px 1px; }
   .chip { padding: 4px 10px; }
 }
 
