@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check app.js && node --check core.js && node --check server/api.js && node --check server/auth.js && node --test tests/*.test.mjs && node build.mjs && node scripts/check-public.mjs",
+    "check": "node --check app.js && node --check core.js && node --check src/worker.js && node --check server/api.js && node --check server/auth.js && node --test tests/*.test.mjs && node build.mjs && node scripts/check-public.mjs",
     "seed-sql": "node scripts/seed-sql.mjs"
   }
 }

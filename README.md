@@ -8,8 +8,8 @@ This repository is public **source code only**. Sponsor records and drafts live 
 
 | Piece | Where |
 | --- | --- |
-| Frontend (`index.html`, `app.js`, `core.js`, `style.css`) | Cloudflare Pages, built to `dist/` |
-| API (`functions/api/[[path]].js` → `server/api.js`) | Pages Functions, same origin at `/api/*` |
+| Frontend (`index.html`, `app.js`, `core.js`, `style.css`) | Cloudflare Worker static assets, built to `dist/` |
+| API (`src/worker.js` → `server/api.js`) | Same Worker, same origin at `/api/*` |
 | Data | Cloudflare D1 database `greengirlera-crm` (binding `DB`, see `wrangler.toml`) |
 | Login | Cloudflare Access, **One-time PIN** sent by email, policy allows only `lee@virtual-lee.com` |
 
@@ -22,18 +22,17 @@ Security layers:
 
 ## Cloudflare setup (one time)
 
-1. **Pages project.** In Workers & Pages, choose Create, then Pages, then Connect to Git, and pick `infin8lee/greengirlera-pipeline`. Set the build command to `npm run build` and the output directory to `dist`, with no framework preset. The D1 binding comes from `wrangler.toml`.
-2. **Access application.** In Zero Trust, go to Access, then Applications, and add a Self-hosted app:
-   - Domains: `greengirlera.virtual-lee.com`, plus `greengirlera-pipeline.pages.dev` and `*.greengirlera-pipeline.pages.dev`.
-   - Policy: Allow, Include, Emails, `lee@virtual-lee.com`.
+The project is the Worker **greengirlera-pipeline** connected to this repository with Workers Builds.
+
+1. **Build settings** (Worker, then Settings, then Builds): build command `npm run build`, deploy command `npx wrangler deploy`, branch `main`. The D1 binding and static assets come from `wrangler.toml`.
+2. **Access policy** (Worker, then Access tab, then Manage Cloudflare Access, or Zero Trust, then Access, then Applications):
+   - Policy: Allow, Include, Emails, `lee@virtual-lee.com`. Codes are only emailed to addresses the policy allows.
    - Login method: One-time PIN.
-   - Session duration: your choice (24h recommended).
-   - Copy the application's **Audience (AUD) tag**, and note your team domain, `https://<team>.cloudflareaccess.com`.
-3. **Pages variables.** In the Pages project, under Settings, Variables and Secrets, add both of these for Production and Preview, then redeploy:
-   - `ACCESS_TEAM_DOMAIN` = `https://<team>.cloudflareaccess.com`
-   - `ACCESS_AUD` = the AUD tag
-4. **Custom domain.** In the Pages project, under Custom domains, add `greengirlera.virtual-lee.com`. The DNS record is created automatically because the zone is on the same account.
-5. **Database schema.** Run `npx wrangler d1 migrations apply greengirlera-crm --remote`. This is already applied to the current database.
+   - Protect both `greengirlera-pipeline.<subdomain>.workers.dev` and `greengirlera.virtual-lee.com`.
+   - Copy the application's **Audience (AUD) tag** and note your team domain, `https://<team>.cloudflareaccess.com`.
+3. **Worker variables** (Settings, then Variables and Secrets): add `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`. `keep_vars = true` keeps them across deploys.
+4. **Custom domain** (Worker, then Domains): add `greengirlera.virtual-lee.com`. DNS and HTTPS are set up automatically.
+5. **Database schema:** run `npx wrangler d1 migrations apply greengirlera-crm --remote`. This is already applied.
 
 ## Admin guide
 
@@ -52,7 +51,7 @@ Node 22+. No runtime dependencies.
 ```sh
 npm run check     # syntax, unit + API tests, build, public-data guard
 npm run build     # dist/
-npx wrangler pages dev --binding ACCESS_TEAM_DOMAIN=... --binding ACCESS_AUD=...   # local, with local D1
+npx wrangler dev --var ACCESS_TEAM_DOMAIN:... --var ACCESS_AUD:...   # local, with local D1
 ```
 
 `scripts/seed-sql.mjs` can build a private seed SQL file from the two CSVs (it refuses to write inside the repo), for `wrangler d1 execute greengirlera-crm --remote --file <outside-repo.sql>`.
