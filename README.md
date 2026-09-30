@@ -34,15 +34,15 @@ The project is the Worker **greengirlera-pipeline** connected to this repository
 2. **Access policy** (Worker, then Access tab, then Manage Cloudflare Access, or Zero Trust, then Access, then Applications):
    - Policy: Allow, Include, Emails, `lee@virtual-lee.com`. Codes are only emailed to addresses the policy allows.
    - Login method: One-time PIN.
-   - Protect both `greengirlera-pipeline.<subdomain>.workers.dev` and `greengirlera.virtual-lee.com`.
+   - Protect both `greengirlera-pipeline.<subdomain>.workers.dev` and `project-ggepipeline.virtual-lee.com`.
    - Copy the application's **Audience (AUD) tag** and note your team domain, `https://<team>.cloudflareaccess.com`.
 3. **Worker variables** (Settings, then Variables and Secrets): add `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`. `keep_vars = true` keeps them across deploys.
-4. **Custom domain** (Worker, then Domains): add `greengirlera.virtual-lee.com`. DNS and HTTPS are set up automatically.
+4. **Custom domain** (Worker, then Domains): add `project-ggepipeline.virtual-lee.com`. DNS and HTTPS are set up automatically.
 5. **Database schema:** run `npx wrangler d1 migrations apply greengirlera-crm --remote`. This is already applied.
 
 ## Admin guide
 
-1. Anyone can open https://greengirlera.virtual-lee.com and browse read-only. To edit, go to https://greengirlera.virtual-lee.com/admin, enter `lee@virtual-lee.com`, and type the code from your inbox. You return to the app in edit mode.
+1. Anyone can open https://project-ggepipeline.virtual-lee.com and browse read-only. To edit, go to https://project-ggepipeline.virtual-lee.com/admin, enter `lee@virtual-lee.com`, and type the code from your inbox. You return to the app in edit mode.
 2. **First load only:** click Import CSV and choose `Green_Girl_Era_Sponsor_Pipeline.csv`, review, and confirm. Then import `Green_Girl_Era_Personalized_Outreach.csv`, which joins on Prospect ID.
    - *Fill empty fields only* (the default) never overwrites values you already have.
    - *Replace with CSV values* is an explicit choice.
