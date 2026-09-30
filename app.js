@@ -29,7 +29,7 @@ const LETTERS = {
 
 const state = {
   email: '', records: [], brief: { ...DEFAULT_BRIEF },
-  view: 'sponsors', // sponsors | pipeline | board | brief
+  view: location.hash === '#plan' ? 'plan' : 'sponsors', // sponsors | pipeline | board | brief | plan
   filters: { q: '', category: '', stage: '', priority: '', market: '', fit: '', sort: 'priority' },
   current: null, // { record, original, composed, letter }
   briefDirty: false,
@@ -163,7 +163,7 @@ async function boot() {
 
 // ---------- shell ----------
 function render() {
-  const nav = [['sponsors', 'Sponsors'], ['pipeline', 'Pipeline'], ['board', 'Stages'], ['brief', 'Pitch brief']];
+  const nav = [['plan', 'Overview Plan'], ['sponsors', 'Sponsors'], ['pipeline', 'Pipeline'], ['board', 'Stages'], ['brief', 'Pitch brief']];
   root.innerHTML = `
   <a class="skip" href="#main">Skip to content</a>
   <header class="masthead">
@@ -192,6 +192,7 @@ function render() {
     render();
   });
   if (state.view === 'brief') return briefView();
+  if (state.view === 'plan') return planView();
   if (state.view === 'sponsors') return sponsorsView();
   pipelineView();
 }
@@ -202,6 +203,7 @@ function switchView(view) {
   state.briefDirty = false;
   if (view !== 'sponsors') state.current = null;
   state.view = view;
+  history.replaceState(null, '', view === 'plan' ? '#plan' : location.pathname + location.search);
   render();
 }
 
@@ -282,7 +284,7 @@ function openSponsor(id) {
   if (!confirmLeave()) return;
   const rec = state.records.find(r => r.id === id);
   if (!rec) return;
-  if (state.view !== 'sponsors') { state.view = 'sponsors'; setCurrent(rec); render(); }
+  if (state.view !== 'sponsors') { state.view = 'sponsors'; if (location.hash) history.replaceState(null, '', location.pathname + location.search); setCurrent(rec); render(); }
   else { setCurrent(rec); drawDossier(); drawRail(); }
   document.querySelector('.studio')?.classList.add('has-current');
   document.querySelectorAll('#dossier .autogrow').forEach(grow);
@@ -636,6 +638,120 @@ async function moveStage(id, value, control) {
     if (err.status === 409 && err.body?.record) Object.assign(rec, err.body.record);
   }
   results();
+}
+
+// ---------- overview plan ----------
+// Everything on this page is computed from the live records, so the public repo holds no CRM data.
+const PLACEHOLDER = /\[[^\]]+\]/g;
+const blanks = d => [...new Set((d['Initial outreach email'] || '').match(PLACEHOLDER) || [])].filter(x => x !== '[Your name]');
+const BLANK_LABELS = [
+  [/nonprofit partner/i, 'A 501(c)(3) nonprofit partner', 'Many programs only give to a registered nonprofit, so the partner applies or is named in the request.'],
+  [/date/i, 'Event date', 'Most programs ask for the date and need weeks or months of lead time.'],
+  [/venue|location|city|county/i, 'Venue or location', 'Local programs check that the event is in their area.'],
+  [/number|participant|attend/i, 'Confirmed attendance', 'Only numbers we can stand behind.'],
+  [/event name|program name/i, 'Event name', 'The event or program the sponsor would support.'],
+  [/amount/i, 'Ask amount', 'A specific dollar or product ask.']
+];
+
+function planView() {
+  const recs = state.records, n = recs.length;
+  const count = fn => recs.filter(fn).length;
+  const byWave = w => recs.filter(r => wave(r.data.Priority) === w);
+  const emailRoute = r => isEmail(r.data['Public email']);
+  const withPeople = count(r => people(r.data['Decision makers']).length);
+  const withRoute = count(r => (r.data['Partnership channel'] || r.data['Public email'] || '').trim());
+  const withLI = count(r => (r.data['LinkedIn page'] || '').trim());
+  const ready = count(r => !blanks(r.data).length);
+  const stageCount = st => count(r => stage(r) === st);
+  const reached = ['Outreach sent', 'In conversation', 'Proposal sent', 'Won', 'Closed'].reduce((t, st) => t + stageCount(st), 0);
+  const replied = ['In conversation', 'Proposal sent', 'Won'].reduce((t, st) => t + stageCount(st), 0);
+  const draftCount = st => count(r => (r.data['Draft status'] || 'Draft') === st);
+  const blankRows = BLANK_LABELS.map(([re, label, why]) => [label, why, count(r => blanks(r.data).some(b => re.test(b)))]).filter(x => x[2]);
+  const briefMissing = [['audience', 'Confirmed audience details'], ['offer', 'Sponsor benefits & opportunities']].filter(([k]) => !(state.brief[k] || '').trim());
+  const firstDate = t => { const m = String(t).match(/(January|February|March|April|May|June|July|August|September|October|November|December)(?: (\d{1,2}),)? (\d{4})/); return m ? Date.parse(`${m[1]} ${m[2] || 1}, ${m[3]}`) : Infinity; };
+  const timing = recs.filter(r => (r.data.Timing || '').trim()).sort((a, b) => firstDate(a.data.Timing) - firstDate(b.data.Timing));
+  const phases = [
+    ['First wave', byWave('First wave'), 'Strongest fit and simplest route. Mostly direct inboxes, so these go out first and show us what resonates.'],
+    ['Second wave', byWave('Second wave'), 'Good fit. Email routes go next; forms and portals follow in batches because each takes longer to complete.'],
+    ['Qualify first', byWave('Qualify first'), 'Grant and foundation programs with rules to meet first, usually a 501(c)(3) partner, a set lead time or a funding cycle. Contact only once we qualify.']
+  ];
+  const chip = r => `<button type="button" class="plan-co" data-id="${esc(r.id)}">${esc(r.company)}</button>`;
+  const step = (num, title, body) => `<section class="plan-step"><div class="plan-num" aria-hidden="true">${num}</div><div class="plan-body"><h2>${title}</h2>${body}</div></section>`;
+
+  document.querySelector('#content').innerHTML = `<div class="overview plan">
+  <header class="ov-head"><div class="eyebrow">Overview plan</div><h1>From ${n} prospects to real conversations</h1>
+    <p class="muted">How Green Girl Era turns the sponsor pipeline into outreach: who we contact first, how we reach the right person, what we ask for, how each email is personalized, how follow-ups are tracked, and the weekly goal we measure against. All numbers update from the live pipeline.</p></header>
+  <section class="stats" aria-label="Pipeline readiness">
+    <div class="stat"><small>Prospects</small><strong>${n}</strong><span>${byWave('First wave').length} first wave · ${byWave('Second wave').length} second · ${byWave('Qualify first').length} qualify first</span></div>
+    <div class="stat"><small>Official route</small><strong>${withRoute}</strong><span>${count(emailRoute)} by email · ${n - count(emailRoute)} by form, portal or in person</span></div>
+    <div class="stat"><small>Named decision makers</small><strong>${withPeople}</strong><span>${withLI} with a LinkedIn company page</span></div>
+    <div class="stat"><small>Drafts written</small><strong>${count(r => (r.data['Initial outreach email'] || '').trim())}</strong><span>${ready} with no blanks left to fill</span></div>
+    <div class="stat"><small>Reached so far</small><strong>${reached}</strong><span>${replied} replied or in talks</span></div>
+  </section>
+
+  ${step(1, 'The next step: event details, then send', `
+    <p>Every prospect already has an official contact route, a suggested ask and a drafted email plus follow-up. Before the first email goes out, we fill in the few details the drafts leave blank, because sponsors decide on specifics.</p>
+    ${blankRows.length ? `<ul class="plan-list">${blankRows.map(([label, why, c]) => `<li><b>${label}</b> <span class="pill">${c} draft${c === 1 ? '' : 's'}</span><br><span class="muted small">${why}</span></li>`).join('')}</ul>` : '<p class="muted">No drafts have blanks left to fill.</p>'}
+    ${briefMissing.length ? `<p class="plan-note">Also add to the <button type="button" class="linkish" data-view-go="brief">Pitch brief</button>: ${briefMissing.map(x => x[1]).join(' and ')}. Drafts use only confirmed facts, so these stay as placeholders until they are added.</p>` : ''}
+    <ol class="flow" aria-label="Pipeline stages">${STAGES.map(st => `<li><span>${st}</span><b>${stageCount(st)}</b></li>`).join('')}</ol>`)}
+
+  ${step(2, 'Who we contact first', `
+    <p>Priority comes from three things on every profile: how well the company fits GGE, how simple the route is, and whether we meet the program's rules today.</p>
+    <div class="phases">${phases.map(([t, list, why], i) => `<div class="phase"><div class="phase-head"><span class="eyebrow">Phase ${i + 1}</span><strong>${t}</strong><span class="pill">${list.length} · ${list.filter(emailRoute).length} email</span></div><p class="muted small">${why}</p>${i === 0 ? `<div class="plan-cos">${list.map(chip).join('')}</div>` : ''}</div>`).join('')}</div>
+    ${timing.length ? `<div class="plan-timing"><h3>Time-sensitive, regardless of phase</h3><ul>${timing.map(r => `<li>${chip(r)}<span>${esc(r.data.Timing)}</span></li>`).join('')}</ul></div>` : ''}`)}
+
+  ${step(3, 'Reaching the right person', `
+    <p>Contacts come only from official sources: the company's own sponsorship, giving or contact pages, and public LinkedIn company pages. No email address is guessed.</p>
+    <ul class="plan-list">
+      <li><b>Official route first.</b> ${withRoute} of ${n} have a published sponsorship portal, form or inbox. When a company says requests must go through its form, we use the form.</li>
+      <li><b>Named decision makers.</b> ${withPeople} profiles list the people most likely to own sponsorship (partnerships, brand marketing, community relations), with why each one matters and the source. Anyone whose current role still needs checking is marked to confirm.</li>
+      <li><b>LinkedIn for a warm touch.</b> ${withLI} have the company page linked, plus a "Find on LinkedIn" search for each person, to follow the company and connect before or after the email.</li>
+    </ul>`)}
+
+  ${step(4, 'Deciding the ask', `
+    <p>Each profile has a <b>Suggested sponsor ask</b> built from how that company actually gives, so we request what they already offer instead of a generic sponsorship package:</p>
+    <ul class="plan-list">
+      <li><b>Grants and cash sponsorship</b> for banks, foundations and corporate programs, sized to their published limits and usually applied for with our nonprofit partner.</li>
+      <li><b>Product or in-kind support</b> for beverage, food, beauty and apparel brands: drinks, samples, gift cards, raffle items or member offers.</li>
+      <li><b>Hosted experiences</b> for studios, venues and golf: a co-hosted class, bay or course time, or a private event space.</li>
+      <li><b>Give-back events</b> where a share of sales or class proceeds goes to the cause.</li>
+    </ul>
+    <p class="muted small">Each profile's <b>Qualification / limits</b> lists the program's rules (nonprofit status, lead time, one request per year), checked before anything is sent.</p>`)}
+
+  ${step(5, 'Personalizing every email', `
+    <ul class="plan-list">
+      <li><b>Pitch angle.</b> Each profile has a sponsorship angle tying that company's own program or audience to GGE's women in golf, wellness and professional community.</li>
+      <li><b>Why it fits GGE.</b> The fit explanation and recent company news give a specific opening line, not a template.</li>
+      <li><b>Right greeting and route.</b> Drafts address the named contact where one is confirmed and follow the company's required format (form fields, letterhead, portal).</li>
+      <li><b>Human review.</b> Every draft is read and edited before sending, and sent by hand. Nothing sends automatically.</li>
+    </ul>`)}
+
+  ${step(6, 'Tracking responses and follow-ups', `
+    <ul class="plan-list">
+      <li><b>Move the stage the same day.</b> Outreach sent after the first email, In conversation when they reply, Proposal sent once terms are shared, then Won or Closed.</li>
+      <li><b>One follow-up, already drafted.</b> If there is no reply after about a week (or the response time the program states), send the follow-up draft once. If there is still no reply, mark it Closed and revisit next season.</li>
+      <li><b>Log every touch.</b> Replies, names and next steps go in Outreach notes, and Next action always says what happens next.</li>
+      <li><b>Draft status.</b> Draft ${draftCount('Draft')} · Needs review ${draftCount('Needs review')} · Ready to send ${draftCount('Ready to send')} · Sent manually ${draftCount('Sent manually')}.</li>
+    </ul>`)}
+
+  ${step(7, 'Weekly goal and how we measure it', `
+    <div class="goals">
+      <div class="goal"><strong>25</strong><span>new first contacts a week, starting with the first wave and email routes</span></div>
+      <div class="goal"><strong>100%</strong><span>of follow-ups sent when due, and every reply logged within a day</span></div>
+      <div class="goal"><strong>Every Friday</strong><span>a quick review of the numbers below to adjust the next week</span></div>
+    </div>
+    <p class="muted small">Email routes take minutes each; portals and forms that ask for documents take longer, so the weekly mix shifts toward them once the email routes are done. At this pace the ${n - byWave('Qualify first').length} first and second wave prospects are all contacted in about ${Math.max(1, Math.ceil((n - byWave('Qualify first').length) / 25))} weeks, with qualify-first programs added as we meet their rules.</p>
+    <table class="plan-score"><caption class="sr">Pipeline scoreboard</caption><tbody>
+      <tr><th scope="row">Contacted</th><td>${reached} of ${n}</td></tr>
+      <tr><th scope="row">Response rate</th><td>${reached ? Math.round(replied / reached * 100) + '%' : 'Starts after the first sends'}</td></tr>
+      <tr><th scope="row">In conversation</th><td>${stageCount('In conversation')}</td></tr>
+      <tr><th scope="row">Proposals sent</th><td>${stageCount('Proposal sent')}</td></tr>
+      <tr><th scope="row">Won</th><td>${stageCount('Won')}</td></tr>
+    </tbody></table>`)}
+  </div>`;
+  const content = document.querySelector('#content');
+  content.querySelectorAll('.plan-co').forEach(b => b.addEventListener('click', () => openSponsor(b.dataset.id)));
+  content.querySelectorAll('[data-view-go]').forEach(b => b.addEventListener('click', () => switchView(b.dataset.viewGo)));
 }
 
 // ---------- pitch brief ----------
