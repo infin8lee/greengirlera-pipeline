@@ -28,7 +28,8 @@ const state = {
   view: 'sponsors', // sponsors | pipeline | board | brief
   filters: { q: '', category: '', stage: '', priority: '', market: '', sort: 'priority' },
   current: null, // { record, original, composed, letter }
-  briefDirty: false
+  briefDirty: false,
+  publicView: false, readOnly: false
 };
 
 // ---------- utilities ----------
@@ -84,7 +85,7 @@ function screen(title, message, actions = '') {
 function sessionExpired() {
   const pending = unsaved();
   state.current = null; state.briefDirty = false;
-  screen('Please sign in again', `Your secure session has ended.${pending ? ' Unsaved edits could not be kept.' : ''} Sign in with a one-time code sent to the admin inbox.`, `<a class="button primary" href="/">Continue to sign in</a>`);
+  screen('Please sign in again', `Your secure session has ended.${pending ? ' Unsaved edits could not be kept.' : ''} Sign in with a one-time code sent to the admin inbox.`, `<a class="button primary" href="${state.publicView ? '/admin' : '/'}">Continue to sign in</a>`);
 }
 
 function setupScreen(setup) {
@@ -100,7 +101,10 @@ async function boot() {
   screen('Opening your workspace…', 'Checking your secure session.');
   try {
     const session = await api('session');
-    state.email = session.email;
+    state.email = session.email || '';
+    state.publicView = !!session.publicView;
+    state.readOnly = !!session.readOnly;
+    document.body.classList.toggle('view-only', state.readOnly);
   } catch (err) {
     if (err.status === 401) return screen('Sign in required', 'This private workspace is protected by an email one-time code. Only the workspace admin can sign in.', `<a class="button primary" href="/">Sign in</a>`);
     if (err.status === 403) return screen('Access restricted', 'This workspace is restricted to its admin. You are signed in with a different email.', `<a class="button" href="/cdn-cgi/access/logout">Sign out</a>`);
@@ -126,21 +130,22 @@ function render() {
     <div class="brandmark">green girl era<span>Sponsor Studio</span></div>
     <nav class="tabsnav" aria-label="Workspace">${nav.map(([id, label]) => `<button class="navlink ${state.view === id ? 'active' : ''}" data-view="${id}" ${state.view === id ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>
     <div class="mast-actions">
+      ${state.readOnly ? `<span class="view-note" role="status">View only</span><a class="button small-btn" href="/admin" id="admin-link">Admin sign in</a>` : `
       <button id="new" class="primary small-btn">Add sponsor</button>
       <details class="menu"><summary aria-label="More actions">More</summary><div class="menu-pop">
         <button id="import" type="button">Import CSV</button>
         <button id="export" type="button" ${state.records.length ? '' : 'disabled'}>Export CSV</button>
         <a href="/cdn-cgi/access/logout" id="signout">Sign out</a>
         <span class="who">${esc(state.email)}</span>
-      </div></details>
+      </div></details>`}
     </div>
   </header>
   <main id="main" tabindex="-1" class="view-${state.view}"><div id="content"></div></main>`;
   root.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
-  root.querySelector('#signout').addEventListener('click', e => { if (unsaved() && !confirm('You have unsaved changes. Sign out anyway?')) e.preventDefault(); else { state.briefDirty = false; state.current = null; } });
-  root.querySelector('#export').addEventListener('click', exportCSV);
-  root.querySelector('#import').addEventListener('click', importCSV);
-  root.querySelector('#new').addEventListener('click', () => {
+  root.querySelector('#signout')?.addEventListener('click', e => { if (unsaved() && !confirm('You have unsaved changes. Sign out anyway?')) e.preventDefault(); else { state.briefDirty = false; state.current = null; } });
+  root.querySelector('#export')?.addEventListener('click', exportCSV);
+  root.querySelector('#import')?.addEventListener('click', importCSV);
+  root.querySelector('#new')?.addEventListener('click', () => {
     if (!confirmLeave()) return;
     state.view = 'sponsors';
     setCurrent({ id: '', company: '', data: { Stage: 'Prospect', Owner: 'Lee', 'Draft status': 'Draft' }, version: null });
@@ -213,7 +218,7 @@ function drawRail() {
   const rows = filteredRecords();
   const currentId = state.current?.record.id;
   if (!state.records.length) {
-    list.innerHTML = `<li class="rail-empty">No sponsors yet. Use <b>More → Import CSV</b> to add your pipeline.</li>`;
+    list.innerHTML = `<li class="rail-empty">${state.readOnly ? 'No sponsors to show yet.' : 'No sponsors yet. Use <b>More → Import CSV</b> to add your pipeline.'}</li>`;
     return;
   }
   list.innerHTML = rows.length ? rows.map(r => `<li><button class="sponsor-item ${r.id === currentId ? 'on' : ''}" data-id="${esc(r.id)}" ${r.id === currentId ? 'aria-current="true"' : ''}>
@@ -339,7 +344,7 @@ function drawDossier() {
         <summary>Every field</summary>
         <p class="small muted">Every stored column${r.id ? `, including Prospect ID ${esc(r.id)} (permanent)` : ''}.</p>
         <div class="grid">${[...new Set([...PIPELINE_COLUMNS, ...OUTREACH_COLUMNS, ...Object.keys(d)])].filter(k => !['Prospect ID', 'Stage', 'Company'].includes(k)).map(k => `<div class="${LONG_FIELDS.has(k) || String(d[k] || '').length > 80 ? 'wide' : ''}">${input(k, { scope: 'a', long: LONG_FIELDS.has(k) || String(d[k] || '').length > 80 })}</div>`).join('')}
-          <div class="field wide"><label for="new-key">Add a custom field</label><div class="inline"><input id="new-key" placeholder="Field name"><button type="button" id="add-key">Add</button></div></div>
+          <div class="field wide add-field"><label for="new-key">Add a custom field</label><div class="inline"><input id="new-key" placeholder="Field name"><button type="button" id="add-key">Add</button></div></div>
         </div>
       </details>
 
@@ -366,12 +371,20 @@ function drawDossier() {
     document.querySelectorAll('#dossier details.more').forEach((x, i) => { x.open = open[i]; });
   });
   if (c.composed) showComposed();
+  if (state.readOnly) lockFields(box);
   updateSavebar();
+}
+
+// View-only visitors can read everything but change nothing. The server enforces this;
+// locking the controls just keeps the page honest.
+function lockFields(scope) {
+  scope.querySelectorAll('input:not([type=search]):not([type=radio]), textarea').forEach(x => { x.readOnly = true; });
+  scope.querySelectorAll('select[data-key], select[data-move]').forEach(x => { x.disabled = true; });
 }
 
 function onEdit(e) {
   const key = e.target.dataset?.key;
-  if (!key || !state.current) return;
+  if (!key || !state.current || state.readOnly) return;
   state.current.record.data[key] = e.target.value;
   // keep duplicate controls for the same field in sync
   document.querySelectorAll(`#dossier [data-key="${CSS.escape(key)}"]`).forEach(el => { if (el !== e.target && el.value !== e.target.value) el.value = e.target.value; });
@@ -381,7 +394,7 @@ function onEdit(e) {
 
 function updateSavebar() {
   const bar = document.querySelector('#savebar');
-  if (bar) bar.hidden = !isDirty() && !!state.current?.record.id;
+  if (bar) bar.hidden = state.readOnly || (!isDirty() && !!state.current?.record.id);
 }
 
 const grow = el => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; };
@@ -408,7 +421,8 @@ function drawLetter() {
       <label class="status-select">Status <select data-key="Draft status">${[...new Set([...DRAFT_STATUSES, status])].map(s => `<option ${s === status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
     </div>
     ${d['Before sending'] ? `<details class="checklist"><summary>Before you send</summary><p>${esc(d['Before sending'])}</p></details>` : ''}
-    <p class="fineprint">Nothing is sent from this workspace. Copy the email, or open it in your own email app to review and send.</p>`;
+    <p class="fineprint">${state.readOnly ? 'View only. ' : ''}Nothing is sent from this workspace. Copy the email, or open it in your own email app to review and send.</p>`;
+  if (state.readOnly) lockFields(box);
   grow(box.querySelector('#l-body'));
   box.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
     const subject = d[l.subject] || '', body = d[l.body] || '';
@@ -533,7 +547,7 @@ function results() {
       const list = rows.filter(r => stage(r) === st);
       return `<section class="column" aria-label="${st}"><h3>${st}<span>${list.length}</span></h3>${list.map(r => `
         <article class="card"><button class="card-open" data-id="${esc(r.id)}"><span class="mono" style="${tone(r)}" aria-hidden="true">${esc(initials(r.company))}</span><span><strong>${esc(r.company)}</strong><small>${esc(r.data.Category || '')}</small></span></button>
-        <label class="move"><span class="sr">Move ${esc(r.company)} to stage</span><select data-move="${esc(r.id)}">${STAGES.map(s => `<option ${s === st ? 'selected' : ''}>${s}</option>`).join('')}</select></label></article>`).join('') || '<p class="muted small">None yet</p>'}</section>`;
+        <label class="move"><span class="sr">Move ${esc(r.company)} to stage</span><select data-move="${esc(r.id)}" ${state.readOnly ? 'disabled' : ''}>${STAGES.map(s => `<option ${s === st ? 'selected' : ''}>${s}</option>`).join('')}</select></label></article>`).join('') || '<p class="muted small">None yet</p>'}</section>`;
     }).join('')}</div>`;
     box.querySelectorAll('[data-move]').forEach(sel => sel.addEventListener('change', () => moveStage(sel.dataset.move, sel.value, sel)));
   } else {
@@ -569,6 +583,7 @@ function briefView() {
     ${Object.keys(DEFAULT_BRIEF).map(k => `<div class="field"><label for="brief-${k}">${BRIEF_LABELS[k][0]}</label><small>${BRIEF_LABELS[k][1]}</small><textarea id="brief-${k}" name="${k}" rows="${k === 'organization' ? 1 : 4}">${esc(state.brief[k] || '')}</textarea></div>`).join('')}
     <div class="actions"><button class="primary" id="brief-save">Save pitch brief</button><span id="brief-dirty" class="dirty" aria-live="polite"></span></div></form>`;
   const form = content.querySelector('#brief');
+  if (state.readOnly) lockFields(form);
   form.addEventListener('input', () => { state.briefDirty = true; content.querySelector('#brief-dirty').textContent = 'Unsaved changes'; });
   form.addEventListener('submit', async e => {
     e.preventDefault();
@@ -652,7 +667,7 @@ function reviewImport(name, rows, mode = 'fill') {
 
 // ---------- keyboard ----------
 document.addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && state.current && isDirty()) { e.preventDefault(); saveRecord(); return; }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && state.current && isDirty() && !state.readOnly) { e.preventDefault(); saveRecord(); return; }
   const layer = document.querySelector('.modal');
   if (!layer) { if (e.key === 'Escape') document.querySelector('details.menu[open]')?.removeAttribute('open'); return; }
   if (e.key === 'Escape') { e.preventDefault(); layer.querySelector('#imp-cancel').click(); return; }

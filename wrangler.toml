@@ -1,17 +1,24 @@
 # Cloudflare Worker with static assets. Deployed by Workers Builds:
 #   build command: npm run build    deploy command: npx wrangler deploy
 # IDs here are not secrets: they only work with an authenticated Cloudflare account.
-# ACCESS_TEAM_DOMAIN and ACCESS_AUD are set as Worker variables in the dashboard
-# (keep_vars preserves them across deploys); the API refuses every request until both exist.
+# PUBLIC VIEW MODE: AUTH_MODE = "view" (below) lets anyone with the URL LOOK at the pipeline.
+# Only the admin can add, edit or delete: they sign in at /admin (a Cloudflare Access application
+# scoped to that one path) and the API verifies that login on every change. Set
+# ACCESS_TEAM_DOMAIN and ACCESS_AUD as Worker variables in the dashboard for that check
+# (keep_vars preserves them across deploys); until both exist the site is read-only.
+# To put the whole site behind the login again, delete the [vars] block.
 name = "greengirlera-pipeline"
 main = "src/worker.js"
 compatibility_date = "2026-09-01"
 keep_vars = true
 
+[vars]
+AUTH_MODE = "view"
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"
-run_worker_first = ["/api/*"]
+run_worker_first = ["/api/*", "/admin", "/admin/*"]
 
 [[d1_databases]]
 binding = "DB"

@@ -322,3 +322,8 @@ tbody tr:hover { background: #fafcfb; }
   .savebar span { margin-right: auto; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+
+/* View-only visitors */
+.view-note { font-size: 13px; font-weight: 600; color: var(--forest); background: var(--sage-soft); border-radius: 999px; padding: 6px 12px; }
+body.view-only .rewrite, body.view-only #composed, body.view-only .danger-zone, body.view-only .add-field, body.view-only #brief-save, body.view-only .savebar { display: none !important; }
+body.view-only .letter-body, body.view-only .lm-row.subject input { cursor: default; }
