@@ -434,3 +434,4 @@ body.view-only .letter-body, body.view-only .lm-row.subject .subject-input { cur
 .person p { margin: 8px 0; font-size: 14px; line-height: 1.5; }
 .person-links { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 14px; overflow-wrap: anywhere; }
 .people .channel { margin: 12px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.people .li-notes { display: block; margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.5; }

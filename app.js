@@ -20,7 +20,7 @@ const BRIEF_LABELS = {
   signature: ['Email signature', 'Appears at the end of rewritten drafts.']
 };
 const DRAFT_STATUSES = ['Draft', 'Needs review', 'Ready to send', 'Sent manually'];
-const LONG_FIELDS = new Set(['Decision makers', 'Sponsorship angle', 'LinkedIn notes', 'Fit explanation', 'How they sponsor', 'What they could provide', 'Verification notes', 'Verified sources', 'Outreach notes', 'Why it fits GGE', 'Suggested sponsor ask', 'Qualification / limits', 'Source evidence', 'Before sending', 'Initial outreach email', 'Follow-up email', 'Next action']);
+const LONG_FIELDS = new Set(['Decision makers', 'Decision maker notes', 'Partnership channel details', 'Sponsorship angle', 'LinkedIn notes', 'Fit explanation', 'How they sponsor', 'What they could provide', 'Verification notes', 'Verified sources', 'Outreach notes', 'Why it fits GGE', 'Suggested sponsor ask', 'Qualification / limits', 'Source evidence', 'Before sending', 'Initial outreach email', 'Follow-up email', 'Next action']);
 const URL_FIELDS = ['Contact source URL', 'Name / fit source URL'];
 const LETTERS = {
   request: { label: 'Sponsorship request', subject: 'Subject', body: 'Initial outreach email' },
@@ -86,7 +86,7 @@ const unconfirmed = d => d['Contact verified'] === 'No' || !!(d['Unconfirmed ema
 const unconfirmedNote = d => unconfirmed(d) ? `<small class="warn">Contact not confirmed on an official page${d['Unconfirmed email'] ? ` (unconfirmed: ${esc(d['Unconfirmed email'])})` : ''}. Check before sending.</small>` : '';
 // "Decision makers" holds one person per line: Name | Title | Why them | Email | LinkedIn URL | Source URL | Currency
 const people = v => lines(v).map(l => { const [name, title, why, email, linkedin, source, currency] = l.split('|').map(x => x.trim()); return { name, title, why, email, linkedin, source, currency }; }).filter(x => x.name);
-const liSearch = (x, company) => 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent([x.name, company].join(' '));
+const liSearch = (x, company) => 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent([x.name, company].join(' ').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim());
 function peopleSection(d, company) {
   const list = people(d['Decision makers']);
   const channel = (d['Partnership channel'] || '').trim();
@@ -109,7 +109,9 @@ function peopleSection(d, company) {
             ${x.currency && /confirm/i.test(x.currency) ? `<small class="warn">${esc(x.currency)}</small>` : ''}
           </div>`; }).join('') || '<p class="muted">No named decision maker is published yet. Use the partnership channel below.</p>'}</div>
         ${channel ? `<p class="channel"><b>Partnership channel:</b> ${channelUrl ? `<a class="source" href="${esc(channelUrl)}" target="_blank" rel="noopener noreferrer">${esc(new URL(channelUrl).hostname.replace(/^www\./, ''))} ↗</a>` : isEmail(channel) ? `<a href="mailto:${esc(channel)}">${esc(channel)}</a>` : esc(channel)}</p>` : ''}
-        ${li ? `<p class="channel"><b>Company on LinkedIn:</b> <a class="source" href="${esc(li)}" target="_blank" rel="noopener noreferrer">linkedin.com ↗</a>${d['LinkedIn notes'] ? ` <span class="muted">${esc(d['LinkedIn notes'])}</span>` : ''}</p>` : ''}
+        ${d['Partnership channel details'] && d['Partnership channel details'] !== channel ? `<p class="channel muted">${esc(d['Partnership channel details'])}</p>` : ''}
+        ${d['Decision maker notes'] ? `<p class="channel"><b>Good to know:</b> ${esc(d['Decision maker notes'])}</p>` : ''}
+        ${li ? `<p class="channel"><b>Company on LinkedIn:</b> <a class="source" href="${esc(li)}" target="_blank" rel="noopener noreferrer">linkedin.com ↗</a>${d['LinkedIn notes'] ? ` <span class="li-notes">${lines(d['LinkedIn notes']).map(l => esc(l).replace(/\(?(https:\/\/www\.linkedin\.com\/[^\s()<]+)\)?/g, (m, u) => safeURL(u) ? ` <a class="source" href="${u}" target="_blank" rel="noopener noreferrer">post ↗</a>` : m)).join('<br>')}</span>` : ''}</p>` : ''}
       </section>`;
 }
 const lines = v => String(v || '').split(/\n+/).map(x => x.trim()).filter(Boolean);
