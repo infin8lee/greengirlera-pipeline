@@ -1,5 +1,9 @@
-// JSON API for the CRM, served by Pages Functions at /api/*.
-// Every route requires a verified Cloudflare Access session for the admin.
+// JSON API for the CRM, served by the Worker at /api/*.
+// By default every route requires a verified Cloudflare Access session for the admin.
+// Public view mode (Worker variable AUTH_MODE = "view", set in wrangler.toml): anyone with
+// the URL can READ. Every change (POST/PUT/DELETE) still requires the verified admin login,
+// so with no admin login configured the site is simply read-only. Any other AUTH_MODE value,
+// or none, keeps the whole API behind the login (it fails closed).
 
 import { tokenFrom, verifyAccessJwt } from './auth.js';
 import { nextProspectId } from '../core.js';
@@ -92,15 +96,26 @@ function checkOrigin(request) {
 
 export async function handleApi(request, env) {
   try {
-    if (!env.DB || !env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) return json({ error: 'The CRM backend is not configured yet.', setup: setupHint(request) }, 503);
-    const user = await authenticate(request, env);
+    const publicView = env.AUTH_MODE === 'view';
+    const accessConfigured = !!(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
+    if (!env.DB || (!publicView && !accessConfigured)) return json({ error: 'The CRM backend is not configured yet.', setup: setupHint(request) }, 503);
+    const isRead = request.method === 'GET' || request.method === 'HEAD';
+    let user = null; // the verified admin, or null for a public visitor
+    if (!publicView) user = await authenticate(request, env);
+    else if (!isRead) {
+      if (!tokenFrom(request)) throw new HttpError(403, 'This site is view-only. Only the admin can make changes: sign in at /admin.');
+      if (!accessConfigured) throw new HttpError(403, 'Admin sign-in is not set up yet, so changes are switched off.');
+      user = await authenticate(request, env);
+    } else if (accessConfigured && tokenFrom(request)) {
+      try { user = await authenticate(request, env); } catch { user = null; } // a stale or foreign token just means "public visitor"
+    }
     checkOrigin(request);
     const url = new URL(request.url);
     const parts = url.pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
     const db = env.DB;
     const method = request.method;
 
-    if (parts[0] === 'session' && parts.length === 1 && method === 'GET') return json({ email: user.email, expires: user.exp });
+    if (parts[0] === 'session' && parts.length === 1 && method === 'GET') return json({ email: user?.email ?? null, expires: user?.exp ?? null, publicView, readOnly: publicView && !user, setup: publicView && !accessConfigured ? setupHint(request) : null });
 
     if (parts[0] === 'sponsors' && parts.length === 1) {
       if (method === 'GET') return json({ records: await allSponsors(db) });
