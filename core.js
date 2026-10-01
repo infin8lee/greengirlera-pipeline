@@ -209,7 +209,7 @@ export function composeDraft(data, brief = {}) {
   const offer = String(brief.offer || '').trim();
   const paragraphs = [
     greeting,
-    `I'm reaching out on behalf of ${org}. ${about}`,
+    `I'm reaching out on behalf of ${org}. ${about} You can learn more about us at greengirlera.com.`,
     fit ? `We think ${company} could be a natural fit because ${fit}.` : `[Add one sentence on why ${company} fits ${org}. See “Why they fit” on this sponsor's page.]`,
     `As we plan our upcoming gatherings, we would love to explore whether ${company} could support one of them, starting with ${topic}.` + (audience ? ` ${audience}` : ' [Add confirmed audience details, such as member profile and expected event size.]'),
     `We'd also love to explore a longer collaboration, for example:\n- co-hosting a member experience together\n- an exclusive offer for our members\n- featuring ${company} in our member communications and at our events`,
