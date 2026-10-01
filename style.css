@@ -547,3 +547,4 @@ body.view-only .letter-body, body.view-only .lm-row.subject .subject-input { cur
 @media (max-width: 899px) { .hero-status { width: 100%; } .hero-status .ctags { justify-content: flex-start; } }
 .contact-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 4px 0 18px; }
 .contact-row .fact-label { margin: 0; color: var(--blush-deep); }
+.pass-panel { width: min(460px, 100%); }

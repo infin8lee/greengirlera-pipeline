@@ -49,12 +49,12 @@ function notify(message, tone = 'info') {
 
 class ApiError extends Error { constructor(status, message, body) { super(message); this.status = status; this.body = body; } }
 
-async function api(path, { method = 'GET', body } = {}) {
+async function api(path, { method = 'GET', body, headers: extra = {} } = {}) {
   let res;
   try {
     res = await fetch('/api/' + path, {
       method, credentials: 'same-origin', cache: 'no-store',
-      headers: body === undefined ? { accept: 'application/json' } : { accept: 'application/json', 'content-type': 'application/json' },
+      headers: { accept: 'application/json', ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...extra },
       body: body === undefined ? undefined : JSON.stringify(body)
     });
   } catch {
@@ -145,6 +145,7 @@ async function boot() {
     state.email = session.email || '';
     state.publicView = !!session.publicView;
     state.readOnly = !!session.readOnly;
+    state.teamTagging = !!session.teamTagging;
     document.body.classList.toggle('view-only', state.readOnly);
   } catch (err) {
     if (err.status === 401) return screen('Sign in required', 'This private workspace is protected by an email one-time code. Only the workspace admin can sign in.', `<a class="button primary" href="/">Sign in</a>`);
@@ -177,6 +178,7 @@ function render() {
       <button id="new" class="primary small-btn">Add sponsor</button>
       <details class="menu"><summary aria-label="More actions">More</summary><div class="menu-pop">
         <button id="import" type="button">Import CSV</button>
+        <button id="team-pass" type="button">Team passcode</button>
         <button id="export" type="button" ${state.records.length ? '' : 'disabled'}>Export CSV</button>
         <a href="/cdn-cgi/access/logout" id="signout">Sign out</a>
         <span class="who">${esc(state.email)}</span>
@@ -187,6 +189,7 @@ function render() {
   root.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
   root.querySelector('#signout')?.addEventListener('click', e => { if (unsaved() && !confirm('You have unsaved changes. Sign out anyway?')) e.preventDefault(); else { state.briefDirty = false; state.current = null; } });
   root.querySelector('#export')?.addEventListener('click', exportCSV);
+  root.querySelector('#team-pass')?.addEventListener('click', teamPasscodeAdmin);
   root.querySelector('#import')?.addEventListener('click', importCSV);
   root.querySelector('#new')?.addEventListener('click', () => {
     if (!confirmLeave()) return;
@@ -785,11 +788,57 @@ const contactPill = r => contactOf(r) ? `<span class="cpill c${contactOf(r)[0]}"
 // Anyone viewing the site can record contact progress; the server accepts only these values.
 const contactTags = (table, r) => `<div class="ctags" role="group" aria-label="Contact status for ${esc(r.company || r.name)}">${['', ...CONTACTS].map(v => `<button type="button" class="ctag ${contactOf(r) === v ? 'on' : ''}" data-ctable="${table}" data-cid="${esc(r.id)}" data-cval="${esc(v)}" aria-pressed="${contactOf(r) === v}">${v || 'Not contacted'}</button>`).join('')}</div>`;
 
+const PASS_KEY = 'gge-team-passcode';
+const savedPasscode = () => { try { return localStorage.getItem(PASS_KEY) || ''; } catch { return ''; } };
+const savePasscode = v => { try { v ? localStorage.setItem(PASS_KEY, v) : localStorage.removeItem(PASS_KEY); } catch { /* private mode: ask again next time */ } };
+
+// A small modal; resolves with the entered text, or '' if cancelled.
+function askText({ eyebrow, title, note, label, button, type = 'password', min = 0 }) {
+  return new Promise(resolve => {
+    const opener = document.activeElement;
+    const el = document.createElement('div');
+    el.className = 'modal';
+    el.innerHTML = `<form class="panel pass-panel" role="dialog" aria-modal="true" aria-labelledby="ask-title">
+      <header class="panel-head"><div><div class="eyebrow">${esc(eyebrow)}</div><h2 id="ask-title">${esc(title)}</h2><small>${note}</small></div><button type="button" class="icon" id="ask-x" aria-label="Cancel">✕</button></header>
+      <div class="imp-body mform"><div class="field"><label for="ask-in">${esc(label)}</label><input id="ask-in" type="${type}" autocomplete="off" ${min ? `minlength="${min}"` : ''} maxlength="100"></div></div>
+      <footer class="panel-foot"><button type="button" id="ask-cancel">Cancel</button><button class="primary">${esc(button)}</button></footer></form>`;
+    document.body.append(el);
+    document.body.classList.add('locked');
+    const done = v => { el.remove(); document.body.classList.remove('locked'); opener?.focus?.(); resolve(v); };
+    el.querySelector('#ask-x').addEventListener('click', () => done(''));
+    el.querySelector('#ask-cancel').addEventListener('click', () => done(''));
+    el.querySelector('form').addEventListener('submit', e => { e.preventDefault(); done(el.querySelector('#ask-in').value); });
+    el.querySelector('#ask-in').focus();
+  });
+}
+
+async function teamPasscodeAdmin() {
+  document.querySelector('.menu')?.removeAttribute('open');
+  const v = await askText({ eyebrow: 'Admin', title: 'Team passcode for contact tagging', note: `${state.teamTagging ? 'A passcode is set. Enter a new one to replace it, or leave blank and save to turn visitor tagging off.' : 'No passcode yet, so only you can tag contacts.'} Share it only with your team. It needs at least 10 characters and is stored only as a secure hash.`, label: 'New team passcode', button: 'Save passcode', type: 'text' });
+  if (v === '' && !state.teamTagging) return;
+  try {
+    const out = await api('settings/team-passcode', { method: 'PUT', body: { passcode: v } });
+    state.teamTagging = out.teamTagging;
+    notify(out.teamTagging ? 'Team passcode saved. Share it with your team.' : 'Visitor tagging is turned off.', 'success');
+  } catch (err) { notify(err.message, 'error'); }
+}
+
 async function setContactStatus(table, id, status, button) {
+  let headers = {};
+  if (state.readOnly) {
+    if (!state.teamTagging) { notify('Contact tagging is not set up yet. Ask the admin for the team passcode.', 'error'); return; }
+    let pass = savedPasscode();
+    if (!pass) {
+      pass = await askText({ eyebrow: 'Team access', title: 'Enter the team passcode', note: 'Ask the Green Girl Era admin for it. This browser will remember it.', label: 'Team passcode', button: 'Continue', min: 1 });
+      if (!pass) return;
+    }
+    headers = { 'x-team-passcode': pass };
+  }
   const group = button?.closest('.ctags');
   group?.querySelectorAll('button').forEach(b => { b.disabled = true; });
   try {
-    const { record } = await api(`${table}/${encodeURIComponent(id)}/contact`, { method: 'POST', body: { status } });
+    const { record } = await api(`${table}/${encodeURIComponent(id)}/contact`, { method: 'POST', body: { status }, headers });
+    if (headers['x-team-passcode']) savePasscode(headers['x-team-passcode']);
     const list = table === 'sponsors' ? state.records : state.members;
     const i = list.findIndex(r => r.id === id);
     if (i >= 0) list[i] = record;
@@ -802,7 +851,10 @@ async function setContactStatus(table, id, status, button) {
       if (wasClean) state.current.original = JSON.stringify(cur);
     }
     notify(status ? `${record.company || record.name}: ${status} recorded.` : `${record.company || record.name}: contact cleared.`, 'success');
-  } catch (err) { notify(err.message, 'error'); }
+  } catch (err) {
+    if (/passcode/i.test(err.message)) savePasscode('');
+    notify(err.message, 'error');
+  }
   if (state.view === 'sponsors') { drawDossier(); drawRail(); }
   else if (state.view === 'members') membersView();
   else if (state.view === 'plan') planView();

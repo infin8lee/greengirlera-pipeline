@@ -67,6 +67,29 @@ export const CONTACT_LEVELS = ['', '1st Contact', '2nd Contact', '3rd Contact'];
 const CONTACT_ROUTE = /^\/api\/(sponsors|members)\/[^/]+\/contact$/;
 const CONTACT_STAGES = { sponsors: { open: ['Prospect', 'Qualified'], from: 'Prospect', to: 'Outreach sent' }, members: { open: ['To contact'], from: 'To contact', to: 'Contacted' } };
 
+// Team passcode for contact tagging. Only a salted SHA-256 hash is stored (settings row 'team').
+const PASSCODE_MIN = 10, PASSCODE_MAX = 100;
+const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+const hashPasscode = async (salt, passcode) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + ':' + passcode)));
+function sameText(a, b) { // constant time for equal-length strings
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+async function teamSetting(db) {
+  const r = await db.prepare("SELECT data FROM settings WHERE id = 'team'").first();
+  const t = r ? JSON.parse(r.data) : null;
+  return t && t.salt && t.hash ? t : null;
+}
+async function checkTeamPasscode(db, request) {
+  const team = await teamSetting(db);
+  if (!team) throw new HttpError(403, 'Contact tagging needs the team passcode, and the admin has not set one yet.');
+  const given = request.headers.get('x-team-passcode') || '';
+  if (!given) throw new HttpError(403, 'Enter the team passcode to tag contacts.');
+  if (given.length > PASSCODE_MAX || !sameText(await hashPasscode(team.salt, given), team.hash)) throw new HttpError(403, 'That team passcode is not right.');
+}
+
 async function setContact(db, table, id, status) {
   const sql = table === 'sponsors'
     ? 'SELECT id, company, data, version FROM sponsors WHERE id = ?1'
@@ -172,7 +195,20 @@ export async function handleApi(request, env) {
     const db = env.DB;
     const method = request.method;
 
-    if (parts[0] === 'session' && parts.length === 1 && method === 'GET') return json({ email: user?.email ?? null, expires: user?.exp ?? null, publicView, readOnly: publicView && !user, setup: publicView && !accessConfigured ? setupHint(request) : null });
+    if (parts[0] === 'session' && parts.length === 1 && method === 'GET') return json({ email: user?.email ?? null, expires: user?.exp ?? null, publicView, readOnly: publicView && !user, teamTagging: !!(await teamSetting(db)), setup: publicView && !accessConfigured ? setupHint(request) : null });
+
+    // Admin only (every non-read outside the contact route requires the verified admin).
+    if (parts[0] === 'settings' && parts[1] === 'team-passcode' && parts.length === 2 && method === 'PUT') {
+      const passcode = String((await readJSON(request, 1024)).passcode ?? '');
+      if (!passcode) {
+        await db.prepare("DELETE FROM settings WHERE id = 'team'").run();
+        return json({ teamTagging: false });
+      }
+      if (passcode.length < PASSCODE_MIN || passcode.length > PASSCODE_MAX) throw new HttpError(400, `The team passcode must be ${PASSCODE_MIN} to ${PASSCODE_MAX} characters.`);
+      const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
+      await db.prepare("INSERT INTO settings (id, data) VALUES ('team', ?1) ON CONFLICT(id) DO UPDATE SET data = excluded.data").bind(JSON.stringify({ salt, hash: await hashPasscode(salt, passcode) })).run();
+      return json({ teamTagging: true });
+    }
 
     if (parts[0] === 'sponsors' && parts.length === 1) {
       if (method === 'GET') return json({ records: await allSponsors(db) });
@@ -213,6 +249,7 @@ export async function handleApi(request, env) {
 
     if ((parts[0] === 'sponsors' || parts[0] === 'members') && parts.length === 3 && parts[2] === 'contact' && method === 'POST') {
       if (!ID.test(parts[1])) throw new HttpError(400, 'Invalid ID.');
+      if (!user) await checkTeamPasscode(db, request);
       const body = await readJSON(request, 1024);
       const status = typeof body?.status === 'string' ? body.status.trim() : null;
       if (status === null || !CONTACT_LEVELS.includes(status)) throw new HttpError(400, 'Contact status must be 1st Contact, 2nd Contact, 3rd Contact or empty.');

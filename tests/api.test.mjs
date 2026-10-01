@@ -7,8 +7,9 @@ const issuer = await fakeIssuer();
 const ORIGIN = 'https://crm.example.com';
 const setup = () => ({ DB: fakeD1(), ACCESS_TEAM_DOMAIN: issuer.team, ACCESS_AUD: issuer.aud, __fetch: issuer.fetchImpl });
 
-async function call(env, path, { method = 'GET', body, token, origin = ORIGIN, type = 'application/json' } = {}) {
+async function call(env, path, { method = 'GET', body, token, origin = ORIGIN, type = 'application/json', passcode } = {}) {
   const headers = {};
+  if (passcode !== undefined) headers['x-team-passcode'] = passcode;
   if (token !== null) headers['cf-access-jwt-assertion'] = token ?? await issuer.sign();
   if (body !== undefined) headers['content-type'] = type;
   if (origin && method !== 'GET') headers.origin = origin;
@@ -235,42 +236,63 @@ test('membership: public visitors see channels only; leads are admin-only in eve
   assert.equal((await call(closed, 'members', { token: null })).status, 401);
 });
 
-test('contact status: anyone can tag 1st/2nd/3rd Contact in view mode, and nothing else changes', async () => {
+test('contact status: team members with the passcode can tag 1st/2nd/3rd Contact, and nothing else changes', async () => {
   const env = { ...setup(), AUTH_MODE: 'view' };
   const admin = await issuer.sign();
   const id = (await call(env, 'sponsors', { method: 'POST', body: { company: 'Tag Co', data: { Stage: 'Prospect', Notes: 'keep' } }, token: admin })).body.record.id;
   const ch = (await call(env, 'members', { method: 'POST', body: { kind: 'channel', name: 'Chan', data: { Stage: 'To contact' } }, token: admin })).body.record.id;
   const lead = (await call(env, 'members', { method: 'POST', body: { kind: 'lead', name: 'Person', data: {} }, token: admin })).body.record.id;
+  const PC = 'green-team-2026';
+
+  // Before the admin sets a passcode, visitors cannot tag; the admin can.
+  assert.equal((await call(env, 'session', { token: null })).body.teamTagging, false);
+  assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null, passcode: PC })).status, 403);
+  // Only the admin can set the passcode, and it must be long enough.
+  assert.equal((await call(env, 'settings/team-passcode', { method: 'PUT', body: { passcode: PC }, token: null })).status, 403);
+  assert.equal((await call(env, 'settings/team-passcode', { method: 'PUT', body: { passcode: 'short' }, token: admin })).status, 400);
+  assert.equal((await call(env, 'settings/team-passcode', { method: 'PUT', body: { passcode: PC }, token: admin })).status, 200);
+  assert.equal((await call(env, 'session', { token: null })).body.teamTagging, true);
+  const stored = env.DB.raw.prepare("SELECT data FROM settings WHERE id = 'team'").get().data;
+  assert.doesNotMatch(stored, /green-team/); // only a salted hash is kept
+  // Missing or wrong passcode is refused and changes nothing.
+  assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null })).status, 403);
+  assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null, passcode: 'green-team-2025' })).status, 403);
+  assert.equal((await call(env, 'sponsors', { token: null })).body.records[0].version, 1);
 
   // A public visitor tags first contact: only the tag and the stage move.
-  const first = await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '1st Contact', data: { Company: 'Hacked' }, company: 'Hacked' }, token: null });
+  const first = await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '1st Contact', data: { Company: 'Hacked' }, company: 'Hacked' }, token: null, passcode: PC });
   assert.equal(first.status, 200);
   let rec = (await call(env, 'sponsors', { token: null })).body.records[0];
   assert.deepEqual([rec.company, rec.data['Contact status'], rec.data.Stage, rec.data.Notes, rec.version], ['Tag Co', '1st Contact', 'Outreach sent', 'keep', 2]);
-  assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '3rd Contact' }, token: null })).status, 200);
+  assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '3rd Contact' }, token: null, passcode: PC })).status, 200);
   rec = (await call(env, 'sponsors', { token: null })).body.records[0];
   assert.deepEqual([rec.data['Contact status'], rec.data.Stage], ['3rd Contact', 'Outreach sent']);
   // Clearing returns an untouched outreach stage to Prospect; later stages are never rolled back.
-  await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '' }, token: null });
+  await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '' }, token: null, passcode: PC });
   rec = (await call(env, 'sponsors', { token: null })).body.records[0];
   assert.deepEqual([rec.data['Contact status'], rec.data.Stage], ['', 'Prospect']);
   await call(env, 'sponsors/' + id, { method: 'PUT', body: { company: 'Tag Co', data: { ...rec.data, Stage: 'In conversation' }, version: rec.version }, token: admin });
-  await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '2nd Contact' }, token: null });
-  await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '' }, token: null });
+  await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '2nd Contact' }, token: null, passcode: PC });
+  await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '' }, token: null, passcode: PC });
   assert.equal((await call(env, 'sponsors', { token: null })).body.records[0].data.Stage, 'In conversation');
 
   // Recruitment channels work the same way; leads are never reachable.
-  assert.equal((await call(env, `members/${ch}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null })).status, 200);
+  assert.equal((await call(env, `members/${ch}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null, passcode: PC })).status, 200);
   const chan = (await call(env, 'members', { token: null })).body.records.find(r => r.id === ch);
   assert.deepEqual([chan.data['Contact status'], chan.data.Stage], ['1st Contact', 'Contacted']);
-  assert.equal((await call(env, `members/${lead}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null })).status, 404);
+  assert.equal((await call(env, `members/${lead}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null, passcode: PC })).status, 404);
 
   // Only the four values, only same-origin, only existing records.
-  for (const status of ['4th Contact', 'Won', 5, null]) assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status }, token: null })).status, 400);
-  assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null, origin: 'https://evil.example.com' })).status, 403);
-  assert.equal((await call(env, `sponsors/GGE-999/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null })).status, 404);
+  for (const status of ['4th Contact', 'Won', 5, null]) assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status }, token: null, passcode: PC })).status, 400);
+  assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null, origin: 'https://evil.example.com', passcode: PC })).status, 403);
+  assert.equal((await call(env, `sponsors/GGE-999/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null, passcode: PC })).status, 404);
   // Every other change is still admin-only.
   assert.equal((await call(env, 'sponsors/' + id, { method: 'PUT', body: { company: 'X', data: {}, version: 9 }, token: null })).status, 403);
+
+  // The admin never needs the passcode, and clearing the passcode turns visitor tagging off.
+  assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: admin })).status, 200);
+  assert.equal((await call(env, 'settings/team-passcode', { method: 'PUT', body: { passcode: '' }, token: admin })).status, 200);
+  assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '2nd Contact' }, token: null, passcode: PC })).status, 403);
 
   // Outside view mode the contact route needs the admin login like everything else.
   assert.equal((await call({ ...setup() }, `sponsors/${id}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null })).status, 401);
