@@ -530,3 +530,20 @@ body.view-only .letter-body, body.view-only .lm-row.subject .subject-input { cur
   .cats.open .chips.wrap { max-height: 34vh; overflow-y: auto; overscroll-behavior: contain; }
   .rail-list { min-height: 160px; }
 }
+
+/* Contact tracking (open to every viewer) */
+.contact-box { margin-top: 10px; }
+.contact-box .fact-label { display: block; margin-bottom: 6px; }
+.hero-status .contact-box .fact-label { color: var(--blush-deep); }
+.ctags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ctag { min-height: 34px; padding: 5px 11px; border-radius: 16px; border: 1px solid var(--line); background: var(--paper); color: var(--forest); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.ctag:hover { border-color: var(--blush); }
+.ctag.on { background: var(--forest); border-color: var(--forest); color: #fff8f1; cursor: default; }
+.ctag:disabled { opacity: .6; }
+.cpill { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 10px; padding: 2px 8px; white-space: nowrap; background: var(--sage-soft); color: var(--blush-deep); }
+.cpill.c2 { background: #f4ead2; color: #6b5220; }
+.cpill.c3 { background: var(--forest); color: #fff8f1; }
+.card .cpill { margin-top: 4px; }
+@media (max-width: 899px) { .hero-status { width: 100%; } .hero-status .ctags { justify-content: flex-start; } }
+.contact-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 4px 0 18px; }
+.contact-row .fact-label { margin: 0; color: var(--blush-deep); }

@@ -61,6 +61,30 @@ async function readJSON(request, limit) {
 const row = r => ({ id: r.id, company: r.company, data: JSON.parse(r.data), version: r.version });
 
 const MEMBER_KINDS = { channel: 'MC', lead: 'ML' };
+// Contact tracking is the one change anyone may make in public view mode. The route writes only
+// the "Contact status" field (one of these values) and the matching stage, nothing else.
+export const CONTACT_LEVELS = ['', '1st Contact', '2nd Contact', '3rd Contact'];
+const CONTACT_ROUTE = /^\/api\/(sponsors|members)\/[^/]+\/contact$/;
+const CONTACT_STAGES = { sponsors: { open: ['Prospect', 'Qualified'], from: 'Prospect', to: 'Outreach sent' }, members: { open: ['To contact'], from: 'To contact', to: 'Contacted' } };
+
+async function setContact(db, table, id, status) {
+  const sql = table === 'sponsors'
+    ? 'SELECT id, company, data, version FROM sponsors WHERE id = ?1'
+    : "SELECT id, kind, name, data, version FROM members WHERE id = ?1 AND kind = 'channel'"; // leads are never reachable here
+  const rules = CONTACT_STAGES[table];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = await db.prepare(sql).bind(id).first();
+    if (!current) throw new HttpError(404, 'Not found.');
+    const data = JSON.parse(current.data);
+    data['Contact status'] = status;
+    const stageNow = data.Stage || rules.from;
+    if (status && rules.open.includes(stageNow)) data.Stage = rules.to;
+    if (!status && stageNow === rules.to) data.Stage = rules.from;
+    const res = await db.prepare(`UPDATE ${table} SET data = ?1, version = version + 1 WHERE id = ?2 AND version = ?3`).bind(JSON.stringify(data), id, current.version).run();
+    if (res.meta.changes) return table === 'sponsors' ? { ...row(current), data, version: current.version + 1 } : { ...memberRow(current), data, version: current.version + 1 };
+  }
+  throw new HttpError(409, 'This record is changing right now. Try again.');
+}
 const memberRow = r => ({ id: r.id, kind: r.kind, name: r.name, data: JSON.parse(r.data), version: r.version });
 
 // Leads are people, so they are only ever read for the verified admin. Public visitors get channels only.
@@ -130,8 +154,12 @@ export async function handleApi(request, env) {
     if (!env.DB || (!publicView && !accessConfigured)) return json({ error: 'The CRM backend is not configured yet.', setup: setupHint(request) }, 503);
     const isRead = request.method === 'GET' || request.method === 'HEAD';
     let user = null; // the verified admin, or null for a public visitor
+    const contactWrite = publicView && request.method === 'POST' && CONTACT_ROUTE.test(new URL(request.url).pathname);
     if (!publicView) user = await authenticate(request, env);
-    else if (!isRead) {
+    else if (contactWrite) {
+      // Open to every viewer; a valid admin login is simply recorded as such.
+      if (accessConfigured && tokenFrom(request)) { try { user = await authenticate(request, env); } catch { user = null; } }
+    } else if (!isRead) {
       if (!tokenFrom(request)) throw new HttpError(403, 'This site is view-only. Only the admin can make changes: sign in at /admin.');
       if (!accessConfigured) throw new HttpError(403, 'Admin sign-in is not set up yet, so changes are switched off.');
       user = await authenticate(request, env);
@@ -181,6 +209,14 @@ export async function handleApi(request, env) {
         if (!res.meta.changes) throw new HttpError(409, 'Prospect not found or changed elsewhere. Reload and try again.');
         return json({ ok: true });
       }
+    }
+
+    if ((parts[0] === 'sponsors' || parts[0] === 'members') && parts.length === 3 && parts[2] === 'contact' && method === 'POST') {
+      if (!ID.test(parts[1])) throw new HttpError(400, 'Invalid ID.');
+      const body = await readJSON(request, 1024);
+      const status = typeof body?.status === 'string' ? body.status.trim() : null;
+      if (status === null || !CONTACT_LEVELS.includes(status)) throw new HttpError(400, 'Contact status must be 1st Contact, 2nd Contact, 3rd Contact or empty.');
+      return json({ record: await setContact(db, parts[0], parts[1], status) });
     }
 
     if (parts[0] === 'members' && parts.length === 1) {

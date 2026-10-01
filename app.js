@@ -278,7 +278,7 @@ function drawRail() {
   list.innerHTML = rows.length ? rows.map(r => `<li><button class="sponsor-item ${r.id === currentId ? 'on' : ''}" data-id="${esc(r.id)}" ${r.id === currentId ? 'aria-current="true"' : ''}>
       <span class="mono" style="${tone(r)}" aria-hidden="true">${esc(initials(r.company))}</span>
       <span class="si-text"><strong>${esc(r.company)}</strong><small>${esc(r.data.Category || 'Uncategorized')} · ${esc(r.data['Market / coverage'] || 'Market to confirm')}</small></span>
-      <span class="si-meta">${r.data['Fit rating'] ? `<span class="si-fit ${fitClass(r.data['Fit rating'])}">${esc(r.data['Fit rating'])}</span>` : (/^1\b/.test(r.data.Priority || '') ? '<span class="dot" title="First wave"></span>' : '')}${stage(r) !== 'Prospect' ? `<span class="si-stage">${esc(stage(r))}</span>` : ''}</span>
+      <span class="si-meta">${r.data['Fit rating'] ? `<span class="si-fit ${fitClass(r.data['Fit rating'])}">${esc(r.data['Fit rating'])}</span>` : (/^1\b/.test(r.data.Priority || '') ? '<span class="dot" title="First wave"></span>' : '')}${contactPill(r) || (stage(r) !== 'Prospect' ? `<span class="si-stage">${esc(stage(r))}</span>` : '')}</span>
     </button></li>`).join('') : '<li class="rail-empty">No sponsors match. Try another search or filter.</li>';
   list.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => openSponsor(b.dataset.id)));
 }
@@ -337,6 +337,7 @@ function drawDossier() {
           <label class="pill-select"><span class="sr">Stage</span><select data-key="Stage">${STAGES.map(s => `<option ${stage(r) === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
         </div>
       </header>
+      ${isNew ? '' : `<div class="contact-box contact-row"><span class="fact-label">Contact made</span>${contactTags('sponsors', r)}</div>`}
 
       <section class="about" aria-label="Who they are">
         <h3 class="section-title">Who they are</h3>
@@ -615,15 +616,16 @@ function results() {
     box.innerHTML = `<div class="board">${STAGES.map(st => {
       const list = rows.filter(r => stage(r) === st);
       return `<section class="column" aria-label="${st}"><h3>${st}<span>${list.length}</span></h3>${list.map(r => `
-        <article class="card"><button class="card-open" data-id="${esc(r.id)}"><span class="mono" style="${tone(r)}" aria-hidden="true">${esc(initials(r.company))}</span><span><strong>${esc(r.company)}</strong><small>${esc(r.data.Category || '')}</small></span></button>
+        <article class="card"><button class="card-open" data-id="${esc(r.id)}"><span class="mono" style="${tone(r)}" aria-hidden="true">${esc(initials(r.company))}</span><span><strong>${esc(r.company)}</strong><small>${esc(r.data.Category || '')}</small>${contactPill(r)}</span></button>
         <label class="move"><span class="sr">Move ${esc(r.company)} to stage</span><select data-move="${esc(r.id)}" ${state.readOnly ? 'disabled' : ''}>${STAGES.map(s => `<option ${s === st ? 'selected' : ''}>${s}</option>`).join('')}</select></label></article>`).join('') || '<p class="muted small">None yet</p>'}</section>`;
     }).join('')}</div>`;
     box.querySelectorAll('[data-move]').forEach(sel => sel.addEventListener('change', () => moveStage(sel.dataset.move, sel.value, sel)));
   } else {
-    box.innerHTML = `<div class="tablewrap"><table><thead><tr><th scope="col">Sponsor</th><th scope="col">Category</th><th scope="col">Priority</th><th scope="col">Stage</th><th scope="col">Next step</th></tr></thead><tbody>${rows.map(r => `
+    box.innerHTML = `<div class="tablewrap"><table><thead><tr><th scope="col">Sponsor</th><th scope="col">Category</th><th scope="col">Priority</th><th scope="col">Stage</th><th scope="col">Contact</th><th scope="col">Next step</th></tr></thead><tbody>${rows.map(r => `
       <tr><td><button class="row-open" data-id="${esc(r.id)}"><span class="mono" style="${tone(r)}" aria-hidden="true">${esc(initials(r.company))}</span><span><strong>${esc(r.company)}</strong><small>${esc(contactLine(r))}</small></span></button></td>
       <td>${esc(r.data.Category || 'Uncategorized')}<small>${esc(r.data['Market / coverage'] || '')}</small></td>
       <td>${esc(wave(r.data.Priority) || 'Unranked')}</td><td><span class="pill stage-${STAGES.indexOf(stage(r))}">${stage(r)}</span></td>
+      <td>${contactPill(r) || '<span class="muted small">Not yet</span>'}</td>
       <td class="next">${esc(r.data['Next action'] || 'Review')}</td></tr>`).join('')}</tbody></table></div>`;
   }
   box.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => openSponsor(b.dataset.id)));
@@ -738,6 +740,7 @@ function planView() {
 
   ${step(6, 'Tracking responses and follow-ups', `
     <ul class="plan-list">
+      <li><b>Tag every touch.</b> Anyone on the team can mark a sponsor 1st Contact, 2nd Contact or 3rd Contact from its profile or the Pipeline list, no sign-in needed. Tagging moves it to Outreach sent.</li>
       <li><b>Move the stage the same day.</b> Outreach sent after the first email, In conversation when they reply, Proposal sent once terms are shared, then Won or Closed.</li>
       <li><b>One follow-up, already drafted.</b> If there is no reply after about a week (or the response time the program states), send the follow-up draft once. If there is still no reply, mark it Closed and revisit next season.</li>
       <li><b>Log every touch.</b> Replies, names and next steps go in Outreach notes, and Next action always says what happens next.</li>
@@ -753,6 +756,7 @@ function planView() {
     <p class="muted small">Email routes take minutes each; portals and forms that ask for documents take longer, so the weekly mix shifts toward them once the email routes are done. At this pace the ${recs.length} active prospects are all contacted in about ${Math.max(1, Math.ceil(recs.length / 25))} weeks.</p>
     <table class="plan-score"><caption class="sr">Pipeline scoreboard</caption><tbody>
       <tr><th scope="row">Contacted</th><td>${reached} of ${recs.length}</td></tr>
+      ${CONTACTS.map(c => `<tr><th scope="row">${c}</th><td>${count(r => contactOf(r) === c)}</td></tr>`).join('')}
       <tr><th scope="row">Response rate</th><td>${reached ? Math.round(replied / reached * 100) + '%' : 'Starts after the first sends'}</td></tr>
       <tr><th scope="row">In conversation</th><td>${stageCount('In conversation')}</td></tr>
       <tr><th scope="row">Proposals sent</th><td>${stageCount('Proposal sent')}</td></tr>
@@ -775,6 +779,40 @@ const MEMBER_FIELDS = {
   channel: [['Name', 'Organization'], ['Channel type', 'Type', CHANNEL_TYPES], ['Area'], ['Stage', 'Stage', CHANNEL_STAGES], ['Fit rating', 'Fit', ['Strong', 'Good', 'Possible']], ['Who they reach', '', null, true], ['Why they fit GGE', '', null, true], ['How to reach their members', '', null, true], ['Suggested first step', '', null, true], ['Public email'], ['Contact route'], ['Contact URL'], ['Source URL'], ['Outreach message', '', null, true], ['Notes', '', null, true]],
   lead: [['Name'], ['How we met', '', LEAD_SOURCES], ['Referred by or channel'], ['Stage', 'Stage', LEAD_STAGES], ['Email'], ['Phone'], ['Instagram or LinkedIn'], ['Interests', 'Interests (golf, wellness, networking...)'], ['Okay to contact', 'Okay to contact?', ['Yes', 'Not yet asked']], ['Next step', '', null, true], ['Notes', '', null, true]]
 };
+const CONTACTS = ['1st Contact', '2nd Contact', '3rd Contact'];
+const contactOf = r => CONTACTS.includes(r?.data?.['Contact status']) ? r.data['Contact status'] : '';
+const contactPill = r => contactOf(r) ? `<span class="cpill c${contactOf(r)[0]}">${esc(contactOf(r))}</span>` : '';
+// Anyone viewing the site can record contact progress; the server accepts only these values.
+const contactTags = (table, r) => `<div class="ctags" role="group" aria-label="Contact status for ${esc(r.company || r.name)}">${['', ...CONTACTS].map(v => `<button type="button" class="ctag ${contactOf(r) === v ? 'on' : ''}" data-ctable="${table}" data-cid="${esc(r.id)}" data-cval="${esc(v)}" aria-pressed="${contactOf(r) === v}">${v || 'Not contacted'}</button>`).join('')}</div>`;
+
+async function setContactStatus(table, id, status, button) {
+  const group = button?.closest('.ctags');
+  group?.querySelectorAll('button').forEach(b => { b.disabled = true; });
+  try {
+    const { record } = await api(`${table}/${encodeURIComponent(id)}/contact`, { method: 'POST', body: { status } });
+    const list = table === 'sponsors' ? state.records : state.members;
+    const i = list.findIndex(r => r.id === id);
+    if (i >= 0) list[i] = record;
+    const cur = state.current?.record;
+    if (table === 'sponsors' && cur?.id === id) {
+      const wasClean = !isDirty();
+      cur.data['Contact status'] = record.data['Contact status'];
+      cur.data.Stage = record.data.Stage;
+      cur.version = record.version;
+      if (wasClean) state.current.original = JSON.stringify(cur);
+    }
+    notify(status ? `${record.company || record.name}: ${status} recorded.` : `${record.company || record.name}: contact cleared.`, 'success');
+  } catch (err) { notify(err.message, 'error'); }
+  if (state.view === 'sponsors') { drawDossier(); drawRail(); }
+  else if (state.view === 'members') membersView();
+  else if (state.view === 'plan') planView();
+  else results();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest?.('[data-ctable]');
+  if (b && !b.disabled && !b.classList.contains('on')) setContactStatus(b.dataset.ctable, b.dataset.cid, b.dataset.cval, b);
+});
+
 const mStage = r => r.data.Stage || (r.kind === 'lead' ? 'New' : 'To contact');
 
 function membersView() {
@@ -793,6 +831,7 @@ function membersView() {
       ${d['Suggested first step'] ? `<p class="mnext"><b>First step.</b> ${esc(d['Suggested first step'])}</p>` : ''}
       <div class="mlinks">${isEmail(d['Public email']) ? `<a href="mailto:${esc(d['Public email'])}">${esc(d['Public email'])}</a>` : ''}${link(d['Contact URL'])}${d['Contact route'] ? `<span class="pill">${esc(d['Contact route'])}</span>` : ''}${d['Source URL'] && d['Source URL'] !== d['Contact URL'] ? `<span class="muted small">Source: ${link(d['Source URL'])}</span>` : ''}</div>
       ${d['Outreach message'] ? `<details><summary>Outreach message</summary><pre class="mmsg">${esc(d['Outreach message'])}</pre><button type="button" class="small-btn" data-mcopy="${esc(r.id)}">Copy message</button></details>` : ''}
+      <div class="contact-box"><span class="fact-label">Contact made</span>${contactTags('members', r)}</div>
       <footer>${state.readOnly ? `<span class="pill">${esc(mStage(r))}</span>` : `<label><span class="sr">Stage for ${esc(r.name)}</span><select data-mstage="${esc(r.id)}">${CHANNEL_STAGES.map(s => `<option ${s === mStage(r) ? 'selected' : ''}>${s}</option>`).join('')}</select></label><button type="button" class="small-btn" data-medit="${esc(r.id)}">Edit</button>`}</footer>
     </article>`; };
 
