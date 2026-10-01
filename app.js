@@ -814,7 +814,7 @@ function askText({ eyebrow, title, note, label, button, type = 'password', min =
 
 async function teamPasscodeAdmin() {
   document.querySelector('.menu')?.removeAttribute('open');
-  const v = await askText({ eyebrow: 'Admin', title: 'Team passcode for contact tagging', note: `${state.teamTagging ? 'A passcode is set. Enter a new one to replace it, or leave blank and save to turn visitor tagging off.' : 'No passcode yet, so only you can tag contacts.'} Share it only with your team. It needs at least 10 characters and is stored only as a secure hash.`, label: 'New team passcode', button: 'Save passcode', type: 'text' });
+  const v = await askText({ eyebrow: 'Admin', title: 'Team passcode for contact tagging', note: `${state.teamTagging ? 'A passcode is set. Enter a new one to replace it, or leave blank and save to turn visitor tagging off.' : 'No passcode yet, so only you can tag contacts.'} Share it only with your team. It needs at least 4 characters and is stored only as a secure hash.`, label: 'New team passcode', button: 'Save passcode', type: 'text' });
   if (v === '' && !state.teamTagging) return;
   try {
     const out = await api('settings/team-passcode', { method: 'PUT', body: { passcode: v } });

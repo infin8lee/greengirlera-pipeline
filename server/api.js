@@ -68,7 +68,7 @@ const CONTACT_ROUTE = /^\/api\/(sponsors|members)\/[^/]+\/contact$/;
 const CONTACT_STAGES = { sponsors: { open: ['Prospect', 'Qualified'], from: 'Prospect', to: 'Outreach sent' }, members: { open: ['To contact'], from: 'To contact', to: 'Contacted' } };
 
 // Team passcode for contact tagging. Only a salted SHA-256 hash is stored (settings row 'team').
-const PASSCODE_MIN = 10, PASSCODE_MAX = 100;
+const PASSCODE_MIN = 4, PASSCODE_MAX = 100;
 const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 const hashPasscode = async (salt, passcode) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + ':' + passcode)));
 function sameText(a, b) { // constant time for equal-length strings

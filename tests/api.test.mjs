@@ -249,7 +249,7 @@ test('contact status: team members with the passcode can tag 1st/2nd/3rd Contact
   assert.equal((await call(env, `sponsors/${id}/contact`, { method: 'POST', body: { status: '1st Contact' }, token: null, passcode: PC })).status, 403);
   // Only the admin can set the passcode, and it must be long enough.
   assert.equal((await call(env, 'settings/team-passcode', { method: 'PUT', body: { passcode: PC }, token: null })).status, 403);
-  assert.equal((await call(env, 'settings/team-passcode', { method: 'PUT', body: { passcode: 'short' }, token: admin })).status, 400);
+  assert.equal((await call(env, 'settings/team-passcode', { method: 'PUT', body: { passcode: 'abc' }, token: admin })).status, 400);
   assert.equal((await call(env, 'settings/team-passcode', { method: 'PUT', body: { passcode: PC }, token: admin })).status, 200);
   assert.equal((await call(env, 'session', { token: null })).body.teamTagging, true);
   const stored = env.DB.raw.prepare("SELECT data FROM settings WHERE id = 'team'").get().data;
