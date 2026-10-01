@@ -211,17 +211,16 @@ export function composeDraft(data, brief = {}) {
     greeting,
     `I'm reaching out on behalf of ${org}. ${about}`,
     fit ? `We think ${company} could be a natural fit because ${fit}.` : `[Add one sentence on why ${company} fits ${org}. See “Why they fit” on this sponsor's page.]`,
-    `We would love to explore ${topic}.` + (audience ? ` ${audience}` : ' [Add confirmed audience details, such as member profile and expected event size.]'),
+    `As we plan our upcoming gatherings, we would love to explore whether ${company} could support one of them, starting with ${topic}.` + (audience ? ` ${audience}` : ' [Add confirmed audience details, such as member profile and expected event size.]'),
+    `We'd also love to explore a longer collaboration, for example:\n- co-hosting a member experience together\n- an exclusive offer for our members\n- featuring ${company} in our member communications and at our events`,
     offer ? `In return, we can offer ${lowerFirst(offer)}.` : '[Add the sponsor benefits you can confirm.]',
-    portal
-      ? `I'm submitting this through your official request channel. Please let me know what else your team needs to review it.`
-      : `Would your team be open to a short conversation, or could you point me to the right person?`,
+    (portal ? `I'm also submitting this through your official request channel, as your guidelines ask. ` : '') + `Would you be open to a short call to explore what might work? I'm happy to share our upcoming calendar and shape ideas around your team's goals.`,
     `Best,\n${signature}`
   ];
   const followupParagraphs = [
     greeting,
-    `I'm following up on my note about ${topic} with ${org}.`,
-    `If it helps, I'm happy to share a short proposal with the format and sponsor benefits. If someone else handles partnerships, a referral would be appreciated.`,
+    `I'm following up on my note about ${company} supporting an upcoming ${org} gathering, starting with ${topic}, and the collaboration ideas I shared, such as co-hosting a member experience.`,
+    `If someone else handles partnerships, a referral would be appreciated. If it isn't a fit right now, just let me know and we'll close the loop.`,
     `Best,\n${signature}`
   ];
   const checks = [];
